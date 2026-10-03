@@ -83,7 +83,6 @@ KNOWN_DEVIATIONS = {
     # share one copy.
     "servelet-h1/src/streaming.rs": [
         "pub struct StreamingBody {",
-        "    pub(crate) rx: std::sync::Arc<tokio::sync::Mutex<Option<tokio::sync::mpsc::Receiver<std::result::Result<Vec<u8>, String>>>>>,",
         "pub fn streaming(mut resp: Response, rx: tokio::sync::mpsc::Receiver<std::result::Result<Vec<u8>, String>>) -> Response {",
         "pub fn streaming_body(resp: &Response) -> Option<StreamingBody> {",
         "    resp.extensions().get::<StreamingBody>().cloned()",
