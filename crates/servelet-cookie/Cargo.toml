@@ -1,0 +1,13 @@
+[package]
+name = "servelet-cookie"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Cookie parse from a Cookie: request header, and Set-Cookie build."
+publish = false
+
+# No dependencies at all. Measured, not assumed: census section 7 measured zero
+# `tokio|rustls|hashtrinity|serde|bytes|base64|...` references in biota's
+# `httpx::cookie` (lib.rs 1910-2135). std only, so this crate is usable from a
+# synchronous main, a build script, or a test with no runtime at all.
+[dependencies]

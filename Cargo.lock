@@ -230,6 +230,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "servelet-cookie"
+version = "0.1.0"
+
+[[package]]
 name = "servelet-core"
 version = "0.1.0"
 dependencies = [

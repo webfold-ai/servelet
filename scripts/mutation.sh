@@ -7,6 +7,7 @@
 #
 #   A. servelet-router: rename a registered route in the fallback test's fixture.
 #   B. servelet-h1:     flip the auto-written `Connection: keep-alive` header to `close`.
+#   C. servelet-cookie: emit `SameSite=Loose`, a value RFC 6265bis does not define.
 #
 # Exit 0 only if both mutations were caught AND the restored suite is green.
 set -uo pipefail
@@ -14,7 +15,7 @@ cd "$(dirname "$0")/.."
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/home/ctown/.cache/cargo-target-servelet-spine}"
 export CARGO_INCREMENTAL=0
 
-caught=0; total=2
+caught=0; total=3
 LOG=$(mktemp)
 trap 'cp /tmp/mutation.bak "$RESTORE" 2>/dev/null || true' EXIT
 RESTORE=""
@@ -75,6 +76,12 @@ echo "=== mutation B: flip a header in the h1 writer ==="
 run_mut "B" crates/servelet-h1/src/wire.rs \
   'response.headers.insert(header::CONNECTION, "keep-alive");' \
   'response.headers.insert(header::CONNECTION, "close");'
+
+echo
+echo "=== mutation C: mislabel a SameSite value in the cookie crate ==="
+run_mut "C" crates/servelet-cookie/src/lib.rs \
+  'SameSite::Lax => "Lax",' \
+  'SameSite::Lax => "Loose",'
 
 echo
 echo "=== restored suite ==="

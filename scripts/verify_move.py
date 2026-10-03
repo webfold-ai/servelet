@@ -23,6 +23,8 @@ import sys
 # crate file -> [(biota file, first line, last line), ...]   1-indexed, inclusive.
 # These are the ranges committed in budget/ranges.tsv and narrated in docs/SPINE.md.
 RANGES = {
+    # lib.rs `pub mod cookie` (1910-2135): the module body, 1911-2134.
+    "servelet-cookie/src/lib.rs": [("lib.rs", 1911, 2134)],
     "servelet-core/src/error.rs": [("kernel.rs", 60, 84)],
     "servelet-core/src/types.rs": [("kernel.rs", 86, 731)],
     "servelet-core/src/extensions.rs": [("kernel.rs", 732, 830)],
@@ -44,6 +46,8 @@ RANGES = {
 # Lines that are never in biota verbatim because they are a *deliberate, documented*
 # deviation (see docs/SPINE.md "Deviations"). Each is an exact, whole-line match.
 KNOWN_DEVIATIONS = {
+    # `#![forbid(unsafe_code)]` — the crate-level lint every servelet crate opens with.
+    "servelet-cookie/src/lib.rs": ["#![forbid(unsafe_code)]"],
     # `fn status_reason` -> `pub fn`: servelet-h1's write_response lives in another crate.
     "servelet-core/src/types.rs": ["pub fn status_reason(status: StatusCode) -> &'static str {"],
     # Request/Response fields were private (only crate-internal accessors read them);

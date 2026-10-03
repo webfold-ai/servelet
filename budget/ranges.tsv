@@ -13,3 +13,4 @@ servelet-h1	servelet-h1/src/wire.rs	4ce2dcd	http-server/src/kernel.rs	3132	3197
 servelet-router	servelet-router/src/lib.rs	4ce2dcd	http-server/src/kernel/platform.rs	1126	1138
 servelet-router	servelet-router/src/router.rs	4ce2dcd	http-server/src/kernel.rs	2446	2815
 servelet-tls	servelet-tls/src/tls.rs	4ce2dcd	http-server/src/kernel.rs	1854	1968
+servelet-cookie	servelet-cookie/src/lib.rs	4ce2dcd	http-server/src/lib.rs	1911	2134

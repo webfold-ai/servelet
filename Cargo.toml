@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/servelet-cookie",
     "crates/servelet-core",
     "crates/servelet-router",
     "crates/servelet-h1",
