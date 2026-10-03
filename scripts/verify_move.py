@@ -56,6 +56,14 @@ RANGES = {
     # kernel/runtime.rs -- serve_gracefully and its ConnectionCounter/bind_reuseport.
     "servelet-h1/src/graceful.rs": [("kernel/runtime.rs", 2073, 2320)],
     "servelet-tls/src/tls.rs": [("kernel.rs", 1854, 1968)],
+    # lib.rs `pub mod websocket` (2472-2929): the handshake half, the frame codec, the client
+    # half, the server half (which landed in this crate's ROOT, because it is the server-side
+    # entry point and one sentence with no "and"), and its five tests.
+    "servelet-ws/src/handshake.rs": [("lib.rs", 2490, 2598)],
+    "servelet-ws/src/frame.rs": [("lib.rs", 2600, 2734)],
+    "servelet-ws/src/client.rs": [("lib.rs", 2736, 2785)],
+    "servelet-ws/src/lib.rs": [("lib.rs", 2787, 2808)],
+    "servelet-ws/tests/moved.rs": [("lib.rs", 2814, 2927)],
 }
 
 # Lines that are never in biota verbatim because they are a *deliberate, documented*
@@ -80,6 +88,7 @@ KNOWN_DEVIATIONS = {
         "    pub fn header_for(&self, domain: &str, request_path: &str, is_secure_request: bool) -> Option<String> {",
         # splitmix64, verbatim from transport's http_client.rs (Ptyktos/transport) -- the crate
         # biota re-exported it from. Documented in the source and in docs/EXTENSIONS.md.
+        "#![forbid(unsafe_code)]",
         "    let x = x.wrapping_add(0x9E3779B97F4A7C15);",
         "    let z = (x ^ (x >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);",
         "    let z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);",
@@ -199,6 +208,56 @@ KNOWN_DEVIATIONS = {
         "        self.cookie.domain = Some(domain.into());",
         "    pub fn partitioned(mut self, partitioned: bool) -> Self {",
         "        self.cookie.partitioned = partitioned;",
+    ],
+    # servelet-ws. The four handshake functions are `pub` because the moved tests are a
+    # SEPARATE crate here (`tests/moved.rs`) where biota's `#[cfg(test)] mod tests` had them for
+    # free; `crate::splitmix64` -> `super::splitmix64` (biota's crate-root helper, this crate's
+    # own copy -- the same 4 lines servelet-client carries, and the same reason).
+    "servelet-ws/src/handshake.rs": [
+        "pub fn sha1(data: &[u8]) -> [u8; 20] {",
+        "pub fn base64_encode(data: &[u8]) -> String {",
+        "pub fn compute_accept_key(client_key: &str) -> String {",
+        "pub fn generate_key() -> String {",
+        "        x = super::splitmix64(x);",
+    ],
+    # `WebSocket` is generic over its stream. biota hard-coded `TcpStream` in the field and in
+    # `accept`/`connect`; here the same codec drives a TLS stream and -- the reason this unit
+    # exists -- `servelet-h1`'s upgraded connection, which is a `Box<dyn AsyncRead + AsyncWrite>`
+    # and never a `TcpStream`. The field TYPE changed; the frame logic around it did not.
+    "servelet-ws/src/frame.rs": [
+        "pub struct WebSocket<S> {",
+        "    pub(crate) stream: S,",
+        "    pub(crate) is_client: bool,",
+        "    pub(crate) pending: Vec<u8>,",
+        "impl<S: AsyncRead + AsyncWrite + Unpin> WebSocket<S> {",
+    ],
+    # `crate::parse_uri`/`host_port` -> `servelet_core::` (path rewrite at the crate seam);
+    # `crate::Stream` -> `servelet_client::Stream` (the socket type moved crates with its
+    # `into_reader`/`into_inner`, which is the only reason the client half could move verbatim
+    # instead of re-implementing a reclaiming line reader); and `Result<WebSocket>` ->
+    # `Result<WebSocket<TcpStream>>` (the generic, named).
+    "servelet-ws/src/client.rs": [
+        "    let uri = servelet_core::parse_uri(&url.replacen(\"ws://\", \"http://\", 1))?;",
+        "    let (host, port) = servelet_core::host_port(&uri)?;",
+        "    let mut stream = servelet_client::Stream::Plain(TcpStream::connect(format!(\"{host}:{port}\")).await.map_err(Error::Io)?);",
+        "        let servelet_client::Stream::Plain(stream) = stream else {",
+        "    #[allow(irrefutable_let_patterns)]",
+        "pub async fn connect(url: &str) -> Result<WebSocket<TcpStream>> {",
+    ],
+    # `accept(mut stream: TcpStream, ..)` -> generic over the stream, one parameter per line.
+    "servelet-ws/src/lib.rs": [
+        "pub async fn accept<S: AsyncRead + AsyncWrite + Unpin>(",
+        "    mut stream: S,",
+        "    req: &Request,",
+        "    pending: Vec<u8>,",
+        ") -> Result<WebSocket<S>> {",
+        # splitmix64, verbatim from transport's http_client.rs -- see the source comment.
+        "fn splitmix64(x: u64) -> u64 {",
+        "#![forbid(unsafe_code)]",
+        "    let x = x.wrapping_add(0x9E3779B97F4A7C15);",
+        "    let z = (x ^ (x >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);",
+        "    let z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);",
+        "    z ^ (z >> 31)",
     ],
     # `fn status_reason` -> `pub fn`: servelet-h1's write_response lives in another crate.
     "servelet-core/src/types.rs": ["pub fn status_reason(status: StatusCode) -> &'static str {"],

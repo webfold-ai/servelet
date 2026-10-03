@@ -66,7 +66,7 @@ what blocks the other consumers.
 
 ## Status
 
-Eight crates extracted from `biota/http-server` rev `4ce2dcd`, all byte-for-byte, all gated:
+Nine crates extracted from `biota/http-server` rev `4ce2dcd`, all byte-for-byte, all gated:
 
 | crate | lines | `cargo tree` | tests |
 |---|---|---|---|
@@ -78,11 +78,12 @@ Eight crates extracted from `biota/http-server` rev `4ce2dcd`, all byte-for-byte
 | `servelet-sse` | 538 | 48 | 9 moved + 4 socket |
 | `servelet-uri` | 76 | **1** | 2 moved |
 | `servelet-client` | 1385 | **36** (47 with `tls`) | 12 moved + 2 TLS-feature |
+| `servelet-ws` | 386 | **38** | 5 moved |
 
 `scripts/gates.sh` runs the suite, the rule-5 line ratchet and the rule-6 dependency weight;
 `scripts/mutation.sh` flips seven behaviours and requires each to turn the suite red (7/7);
-`scripts/verify_move.py` reports 3059/3059 code lines verbatim in biota. Behaviour added after a
+`scripts/verify_move.py` reports 3414/3414 code lines verbatim in biota. Behaviour added after a
 move, and what a consumer does instead of the actix surface, are in `docs/EXTENSIONS.md`.
 
-Next, per `docs/EXTRACTION.md` §9.1: `servelet-h2`, `-ws`, `-openapi`, `-acme`, and the four
+Next, per `docs/EXTRACTION.md` §9.1: `servelet-h2`, `-openapi`, `-acme`, and the four
 nexus-resident layers (`-limits`, `-cors`, `-static`, `-authed`). Then nexus switches over.

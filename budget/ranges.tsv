@@ -22,3 +22,8 @@ servelet-client	servelet-client/src/reqwest.rs	4ce2dcd	http-server/src/kernel.rs
 servelet-client	servelet-client/src/stream.rs	4ce2dcd	http-server/src/kernel.rs	1674	1852
 servelet-client	servelet-client/src/pool.rs	4ce2dcd	http-server/src/kernel.rs	1970	2083
 servelet-client	servelet-client/src/send.rs	4ce2dcd	http-server/src/kernel.rs	2085	2444
+servelet-ws	crates/servelet-ws/src/handshake.rs	4ce2dcd	http-server/src/lib.rs	2490	2598
+servelet-ws	crates/servelet-ws/src/frame.rs	4ce2dcd	http-server/src/lib.rs	2600	2734
+servelet-ws	crates/servelet-ws/src/client.rs	4ce2dcd	http-server/src/lib.rs	2736	2785
+servelet-ws	crates/servelet-ws/src/lib.rs	4ce2dcd	http-server/src/lib.rs	2787	2808
+servelet-ws	crates/servelet-ws/tests/moved.rs	4ce2dcd	http-server/src/lib.rs	2814	2927
