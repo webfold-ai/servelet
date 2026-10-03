@@ -19,4 +19,8 @@ servelet-client = { path = "../servelet-client" }
 tokio = { workspace = true, features = ["net", "io-util", "macros", "rt"] }
 
 [dev-dependencies]
+# The upgrade test drives the real path a consumer uses: a Router, the authed layer in front of
+# it, h1's serve_connection, a real listener. These are dev-only -- nothing in `src/` names them.
+servelet-h1 = { path = "../servelet-h1" }
+servelet-router = { path = "../servelet-router" }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "io-util", "time"] }

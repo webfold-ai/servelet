@@ -287,6 +287,15 @@ KNOWN_DEVIATIONS = {
     # `crate::httpsrv::actix::StreamingBody` -> this crate's own `crate::StreamingBody`.
     "servelet-h1/src/wire.rs": [
         "        let mut resp = router.handle(req).await;",
+        # The upgrade seam (docs/EXTENSIONS.md §6): six lines of dispatch between the handler
+        # and the response writers. `return` rather than `break` so the clean-shutdown below
+        # does not run on a connection the callback now owns.
+        "        if let Some(upgrade) = crate::upgrade::take_upgrade(&mut resp) {",
+        "            let upgraded = crate::upgrade::Upgraded::new(Box::new(reader));",
+        "            if let Err(e) = upgrade(upgraded).await {",
+        # (`return;` needs no entry: biota's own serve_connection has that exact line inside
+        # the moved range, so the line-level check already counts it as verbatim.)
+        '                eprintln!("DEBUG  target=bedrock::serve");  // was: DEBUG target: "bedrock::serve", error = %e, "the upgraded connection ended in an error"',
         "        if let Some(formatter) = crate::streaming::take_formatter(&mut resp) {",
         "            let mut writer: &mut (dyn tokio::io::AsyncWrite + Unpin + Send) = &mut reader;",
         "            let written = (formatter)(&mut writer, resp).await;",

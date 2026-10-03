@@ -154,6 +154,21 @@ pub async fn serve_connection<S: AsyncRead + AsyncWrite + Unpin + Send + 'static
         };
         let keep = req.version() != Version::HTTP_10 && !connection_close(req.headers());
         let mut resp = router.handle(req).await;
+        // An upgraded connection (a WebSocket, today): the handler stashed a callback on the
+        // response and the connection is now ITSS. The `BufReader` goes with it, unread buffer
+        // and all -- whatever the client pipelined behind the request head (a WebSocket client's
+        // first frame very often arrives in the same read) is still in there, and handing over
+        // the reader rather than the bare stream is what keeps those bytes. `return`, not
+        // `break`: past this point `reader` belongs to the callback, so the clean-shutdown at
+        // the end of this function must not touch it, and no `101` is written here either --
+        // the protocol owns its own first bytes (`servelet_ws::accept` writes the 101 itself).
+        if let Some(upgrade) = crate::upgrade::take_upgrade(&mut resp) {
+            let upgraded = crate::upgrade::Upgraded::new(Box::new(reader));
+            if let Err(e) = upgrade(upgraded).await {
+                eprintln!("DEBUG  target=bedrock::serve");  // was: DEBUG target: "bedrock::serve", error = %e, "the upgraded connection ended in an error"
+            }
+            return;
+        }
         // CUT (docs/SPINE.md "Deviations"): the SSE branch that stood here is `servelet-sse`'s
         // to reinstate. It dispatched on `Response::sse_body()`, a method whose type
         // (`crate::httpsrv::httpx::sse::SseBody`) is another crate's. The generic streaming branch
