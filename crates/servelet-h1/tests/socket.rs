@@ -11,7 +11,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use servelet_core::{Method, Request, Response, StatusCode};
-use servelet_h1::{serve_connection, streaming};
+use servelet_h1::{serve_connection, streaming, take_receiver, with_formatter};
 use servelet_router::Router;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -217,4 +217,93 @@ async fn the_request_reader_parses_the_three_parts_of_the_request_line() {
     assert_eq!(req.version, servelet_core::Version::HTTP_10);
     assert_eq!(req.body(), b"hello");
     assert_eq!(req.headers().get("host").unwrap().to_str().unwrap(), "localhost");
+}
+// -- The formatter seam (added by this extraction) ---------------------------
+//
+// A response that carries a `StreamFormatter` is written by THAT formatter; a response that
+// carries only a `StreamingBody` is written by this crate's own chunked writer. Both paths are
+// asserted here over a real socket, because a seam that is only ever exercised in memory is a
+// seam nobody has tested.
+
+/// A stashed formatter replaces the default writer: the formatter's own bytes reach the wire.
+#[tokio::test]
+async fn a_stashed_formatter_is_the_one_that_writes_the_stream() {
+    let (tx, rx) = tokio::sync::mpsc::channel::<std::result::Result<Vec<u8>, String>>(4);
+    let body = streaming(Response::new(StatusCode::OK, Vec::new()), rx);
+    let stashed = body.clone();
+    let router = Router::new().route_sync(
+        Method::GET,
+        "/fmt",
+        move |_req| {
+            let fmt: servelet_h1::StreamFormatter = std::sync::Arc::new(
+                |mut writer: &mut (dyn tokio::io::AsyncWrite + Unpin + Send),
+                 resp,
+                 body| {
+                    Box::pin(async move {
+                        use tokio::io::AsyncWriteExt;
+                        let mut head = format!(
+                            "{} {} {}\r\n",
+                            resp.version.as_str(),
+                            resp.status.as_u16(),
+                            servelet_core::status_reason(resp.status)
+                        );
+                        head.push_str("x-formatter: used\r\n\r\n");
+                        writer.write_all(head.as_bytes()).await?;
+                        let mut rx = take_receiver(body).await?;
+                        while let Some(next) = rx.recv().await {
+                            let bytes = next.map_err(servelet_core::Error::Http)?;
+                            writer.write_all(&bytes).await?;
+                        }
+                        writer.write_all(b"END").await?;
+                        writer.flush().await?;
+                        Ok(())
+                    })
+                },
+            );
+            with_formatter(stashed.clone(), fmt)
+        },
+    );
+    let addr = spawn_server(router).await;
+
+    tx.send(Ok(b"FROM-FORMATTER".to_vec())).await.unwrap();
+    drop(tx);
+
+    let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+    stream.write_all(b"GET /fmt HTTP/1.1\r\nHost: x\r\n\r\n").await.unwrap();
+    let bytes = read_until(&mut stream, |b| b.ends_with(b"END")).await;
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(text.contains("x-formatter: used\r\n"), "the stashed formatter must set its own header: {text}");
+    assert!(text.contains("FROM-FORMATTER"), "{text}");
+    assert!(text.ends_with("END"), "{text}");
+    // The default writer would have sent `Transfer-Encoding: chunked` and a 0-chunk. The
+    // formatter's output is raw, so neither may be present -- that difference is the assertion.
+    assert!(!text.contains("transfer-encoding: chunked"), "{text}");
+}
+
+/// Without a formatter the default writer still runs: the seam is additive, not a replacement.
+#[tokio::test]
+async fn no_formatter_means_the_default_chunked_writer() {
+    let (tx, rx) = tokio::sync::mpsc::channel::<std::result::Result<Vec<u8>, String>>(4);
+    let held = std::sync::Arc::new(std::sync::Mutex::new(Some(rx)));
+    let from_handler = held.clone();
+    let router = Router::new().route_sync(
+        Method::GET,
+        "/plain",
+        move |_req| {
+            let rx = from_handler.lock().unwrap().take().expect("one request per test");
+            streaming(Response::new(StatusCode::OK, Vec::new()), rx)
+        },
+    );
+    let addr = spawn_server(router).await;
+
+    tx.send(Ok(b"DEFAULT".to_vec())).await.unwrap();
+    drop(tx); // the 0-chunk only goes out when the producer is gone
+
+    let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+    stream.write_all(b"GET /plain HTTP/1.1\r\nHost: x\r\n\r\n").await.unwrap();
+    let bytes = read_until(&mut stream, |b| b.ends_with(b"0\r\n\r\n")).await;
+    let text = String::from_utf8_lossy(&bytes);
+    // Header names go out lowercased by the moved writer; assert the bytes, not the casing I wished for.
+    assert!(text.contains("transfer-encoding: chunked"), "{text}");
+    assert!(text.contains("7\r\nDEFAULT\r\n"), "one chunk, hex length 7: {text}");
 }

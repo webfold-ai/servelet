@@ -92,6 +92,14 @@ KNOWN_DEVIATIONS = {
     ],
     # `crate::httpsrv::actix::StreamingBody` -> this crate's own `crate::StreamingBody`.
     "servelet-h1/src/wire.rs": [
+        "            let mut resp = resp;",
+        "            let formatter = crate::streaming::take_formatter(&mut resp);",
+        "            let mut writer: &mut (dyn tokio::io::AsyncWrite + Unpin + Send) = &mut reader;",
+        "            let written = match formatter {",
+        "                Some(f) => (f)(&mut writer, resp, streaming_body).await,",
+        "                None => write_streaming_response(&mut writer, resp, streaming_body).await,",
+        "            if let Err(e) = written {",
+        "pub async fn write_chunk<W: AsyncWriteExt + Unpin>(writer: &mut W, data: &[u8]) -> Result<()> {",
         "        if let Some(streaming_body) = crate::streaming_body(&resp) {",
         "    streaming_body: crate::StreamingBody,",
         "    let mut rx = crate::streaming::take_receiver(streaming_body).await?;",
@@ -107,7 +115,7 @@ KNOWN_DEVIATIONS = {
         "pub fn streaming(mut resp: Response, rx: tokio::sync::mpsc::Receiver<std::result::Result<Vec<u8>, String>>) -> Response {",
         "pub fn streaming_body(resp: &Response) -> Option<StreamingBody> {",
         "    resp.extensions().get::<StreamingBody>().cloned()",
-        "pub(crate) async fn take_receiver(body: StreamingBody) -> Result<tokio::sync::mpsc::Receiver<std::result::Result<Vec<u8>, String>>> {",
+        "pub async fn take_receiver(body: StreamingBody) -> Result<tokio::sync::mpsc::Receiver<std::result::Result<Vec<u8>, String>>> {",
         "    Ok(body", "        .rx", "        .lock()", "        .await", "        .take()",
         "        .expect(\"StreamingBody's receiver is stashed exactly once per response and consumed exactly once, here\"))",
     ],
@@ -134,6 +142,7 @@ KNOWN_DEVIATIONS = {
 # the whole tail of the file is what's excluded.
 POST_MOVE_MARKER = {
     "servelet-cookie/src/lib.rs": "// -- Added after the byte-for-byte move",
+    "servelet-h1/src/streaming.rs": "// -- The formatter seam (added after the move)",
 }
 
 SKIP_PREFIX = re.compile(r"^\s*(use |#\[forbid|mod |pub mod |pub use |//! )")

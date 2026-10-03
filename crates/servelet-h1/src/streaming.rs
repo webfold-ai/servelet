@@ -56,11 +56,52 @@ pub fn streaming_body(resp: &Response) -> Option<StreamingBody> {
 /// wrapper (`streaming_body.rx.lock().await.take()`). Taking it through a named method on the type
 /// is the same operation with the same `expect` message; it exists so the crate can hand out the
 /// body without handing out the field.
-pub(crate) async fn take_receiver(body: StreamingBody) -> Result<tokio::sync::mpsc::Receiver<std::result::Result<Vec<u8>, String>>> {
+pub async fn take_receiver(body: StreamingBody) -> Result<tokio::sync::mpsc::Receiver<std::result::Result<Vec<u8>, String>>> {
     Ok(body
         .rx
         .lock()
         .await
         .take()
         .expect("StreamingBody's receiver is stashed exactly once per response and consumed exactly once, here"))
+}
+// -- The formatter seam (added after the move) ------------------------------
+//
+// WHY: `serve_connection` decides between the buffered writer and the streaming writer by
+// asking the response what it carries. SSE needs the streaming writer with DIFFERENT framing
+// (an `id:`/`event:`/`data:` encoder, a keep-alive comment on idle, a `retry:` preamble), and its
+// framing lives in `servelet-sse`, which must not be a dependency of this crate — the reverse
+// edge would make h1 know sse exists (README rule 2).
+//
+// The seam is a value in the response's own extensions, exactly like the body itself: no global,
+// no registry, no "installed once" (rule 3). `servelet-sse` inserts one; `serve_connection`
+// takes it out if it is there and uses the default writer if it is not. This crate never names
+// the SSE type.
+
+/// Writes a streaming response body to the wire. `servelet-h1`'s own default is
+/// `write_streaming_response`; `servelet-sse` supplies its own with SSE framing.
+///
+/// Higher-ranked over the writer's lifetime on purpose: the future writes to the stream it was
+/// given, so it borrows it. It is awaited in place, never spawned, which is why the lifetime is
+/// sound and why nothing here needs `'static`.
+pub type StreamFormatter = std::sync::Arc<
+    dyn for<'w> Fn(
+            &'w mut (dyn tokio::io::AsyncWrite + Unpin + Send),
+            Response,
+            StreamingBody,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'w>>
+        + Send
+        + Sync,
+>;
+
+/// Stash a formatter on a response whose body is a [`StreamingBody`]. Called by the crate that
+/// owns the framing; `serve_connection` picks it up.
+pub fn with_formatter(mut resp: Response, formatter: StreamFormatter) -> Response {
+    resp.extensions_mut().insert(formatter);
+    resp
+}
+
+/// Take the stashed formatter, if there is one. `Extensions::remove`, once — a formatter is
+/// consumed exactly once per response, like the receiver.
+pub(crate) fn take_formatter(resp: &mut Response) -> Option<StreamFormatter> {
+    resp.extensions_mut().remove()
 }

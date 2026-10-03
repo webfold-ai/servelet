@@ -160,7 +160,18 @@ pub async fn serve_connection<S: AsyncRead + AsyncWrite + Unpin + Send + 'static
         // below is untouched: an SSE body is stashed the same way and, without its formatter,
         // still goes out as real chunked bytes.
         if let Some(streaming_body) = crate::streaming_body(&resp) {
-            if let Err(e) = write_streaming_response(&mut reader, resp, streaming_body).await {
+            // The crate that owns the framing for this body stashed a writer for it (SSE does,
+            // `servelet-sse`); with none stashed, this crate's own chunked writer runs. Erasing
+            // the concrete reader type here is what lets a formatter written against any
+            // `AsyncWrite` be stored in the response and used here.
+            let mut resp = resp;
+            let formatter = crate::streaming::take_formatter(&mut resp);
+            let mut writer: &mut (dyn tokio::io::AsyncWrite + Unpin + Send) = &mut reader;
+            let written = match formatter {
+                Some(f) => (f)(&mut writer, resp, streaming_body).await,
+                None => write_streaming_response(&mut writer, resp, streaming_body).await,
+            };
+            if let Err(e) = written {
                 eprintln!("DEBUG  target=bedrock::serve");  // was: DEBUG target: "bedrock::serve", error = %e, "connection closed during streaming response"
             }
             break;
@@ -242,7 +253,7 @@ pub async fn write_response<W: AsyncWriteExt + Unpin>(
 /// One HTTP chunked-transfer-encoding frame (`{hex-len}\r\n{data}\r\n`) — shared by the SSE and
 /// generic streaming writers, the two response paths that write a body incrementally rather than
 /// all at once.
-async fn write_chunk<W: AsyncWriteExt + Unpin>(writer: &mut W, data: &[u8]) -> Result<()> {
+pub async fn write_chunk<W: AsyncWriteExt + Unpin>(writer: &mut W, data: &[u8]) -> Result<()> {
     writer.write_all(format!("{:x}\r\n", data.len()).as_bytes()).await?;
     writer.write_all(data).await?;
     writer.write_all(b"\r\n").await?;

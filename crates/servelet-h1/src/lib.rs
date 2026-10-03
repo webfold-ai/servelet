@@ -11,7 +11,9 @@
 //!   * `write_streaming_response` — lines 3143-3197
 //!
 //! CUT, with the reason, in `docs/SPINE.md` (both belong to crates this unit does not build):
-//!   * `write_sse_response`/`write_sse_chunk` (3066-3130) — `servelet-sse` owns the SSE framing.
+//!   * `write_sse_response`/`write_sse_chunk` (3066-3130) — `servelet-sse` owns the SSE framing;
+//!     it reaches this crate's writer through the `StreamFormatter` seam (`streaming.rs`), not
+//!     through a dependency edge in this direction.
 //!   * the h2c-preface sniff at the top of `serve_connection` — `servelet-h2` owns the preface.
 //!
 //! Public API: [`serve`], [`serve_gracefully`], [`serve_connection`], [`read_request`],
@@ -32,8 +34,8 @@ use tracing::Instrument;
 mod streaming;
 mod wire;
 
-pub use streaming::{streaming, streaming_body, StreamingBody};
-pub use wire::{read_request, serve, serve_connection, write_response};
+pub use streaming::{streaming, streaming_body, with_formatter, StreamFormatter, StreamingBody, take_receiver};
+pub use wire::{read_request, serve, serve_connection, write_chunk, write_response};
 pub use graceful::serve_gracefully;
 
 mod graceful;
