@@ -1,0 +1,22 @@
+[package]
+name = "servelet-router"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Path routing with params and wildcards, nest, merge, layer."
+publish = false
+
+[dependencies]
+servelet-core = { path = "../servelet-core" }
+# `sync` only: `Router::layered` holds the wrapped service behind `tokio::sync::Mutex`. Not the
+# runtime, not the reactor -- no net/io-util/time here.
+tokio = { workspace = true, features = ["sync"] }
+hashtrinity.workspace = true
+# `Router::handle` opens a real `tracing` span per request. Not optional: the behaviour is
+# part of the moved code.
+tracing.workspace = true
+
+[dev-dependencies]
+# The moved tests are `#[tokio::test]`; the span test needs a real subscriber.
+tokio = { workspace = true, features = ["macros", "rt"] }
+tracing-subscriber.workspace = true

@@ -1,0 +1,15 @@
+[package]
+name = "servelet-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The Request/Response data model every servelet crate speaks: Method, StatusCode, Uri, Version, headers, Extensions."
+publish = false
+
+[dependencies]
+# Only hashtrinity, and only for three reasons (see docs/SPINE.md "Dependencies"):
+#   `CoordMap` + `PHI` -> HeaderMap's store and its coordinate hash,
+#   `Table`         -> Extensions' exact-key type-map,
+#   `#[derive(hashtrinity::Error)]` -> the Error enum's Display/source impls.
+# No tokio at all: this crate is pure data and must stay usable without a runtime.
+hashtrinity.workspace = true

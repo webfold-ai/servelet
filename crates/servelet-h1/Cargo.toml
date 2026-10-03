@@ -1,0 +1,16 @@
+[package]
+name = "servelet-h1"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The HTTP/1.1 wire: parse requests, write responses, chunked, keep-alive, serve."
+publish = false
+
+[dependencies]
+servelet-core = { path = "../servelet-core" }
+servelet-router = { path = "../servelet-router" }
+# net/io-util: the accept loop and the reader. time: `serve_gracefully`'s drain poll.
+# sync: the streaming body's `Arc<Mutex<Option<Receiver>>>`. signal: SIGTERM/SIGINT drain.
+# rt + rt-multi-thread: `tokio::spawn` per connection. macros: the moved `#[tokio::test]`s.
+tokio = { workspace = true, features = ["net", "io-util", "time", "sync", "signal", "rt", "rt-multi-thread", "macros"] }
+tracing.workspace = true
