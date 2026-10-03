@@ -238,12 +238,24 @@ async fn router_merge_combines_two_routers() {
 
 /// Real proof of `fallback`: an unmatched request hits the custom fallback, not the bare
 /// default 404.
+///
+/// It asserts BOTH directions on purpose. Asserting only the fallback half (as this test did at
+/// `bf34eca`) leaves the registered route unpinned, so renaming it — which `scripts/mutation.sh`
+/// does — leaves the suite green and proves nothing. A fallback test has to show that the known
+/// route still resolves AND that the unknown one does not, or it cannot tell "the fallback fired"
+/// from "the router matched nothing at all".
 #[tokio::test]
 async fn router_fallback_catches_unmatched_requests() {
     let router = Router::new()
-        .route_sync(Method::GET, "/known-MUTATED", |_req| Response::ok("known"))
+        .route_sync(Method::GET, "/known", |_req| Response::ok("known"))
         .fallback(|_req| async { Response::new(StatusCode::NOT_FOUND, "custom-fallback") });
 
+    // The registered route must still be served — this half is what a renamed route breaks.
+    let hit = router.handle(Request::new(Method::GET, "/known".parse().unwrap())).await;
+    assert_eq!(hit.status(), StatusCode::OK);
+    assert_eq!(hit.text().await.unwrap(), "known");
+
+    // And an unregistered path must reach the custom fallback, not the bare default 404.
     let resp = router.handle(Request::new(Method::GET, "/unknown".parse().unwrap())).await;
     assert_eq!(resp.text().await.unwrap(), "custom-fallback");
 }

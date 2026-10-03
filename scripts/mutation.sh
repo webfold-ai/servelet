@@ -15,20 +15,50 @@ export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/home/ctown/.cache/cargo-target-ser
 export CARGO_INCREMENTAL=0
 
 caught=0; total=2
+LOG=$(mktemp)
+trap 'cp /tmp/mutation.bak "$RESTORE" 2>/dev/null || true' EXIT
+RESTORE=""
 
-run_mut() { # run_mut <name> <file> <python-replace-tuple...>
-  local name="$1"; shift
-  local f="$1"; shift
+# Run the suite and report whether it went red.
+#
+# This deliberately captures cargo's output to a log file and greps the FILE, rather than
+# piping `cargo test | grep -q "test result: FAILED"`. Under `set -o pipefail`, `grep -q` exits the
+# instant it matches, cargo takes a SIGPIPE on its next write, and the pipeline reports cargo's
+# 141 instead of grep's 0 -- so a mutation that WAS caught was reported as having survived. That
+# bug is why this script exists rather than being a claim in a doc; it hid a real failure for one
+# run, and the fix is a temp file.
+suite_is_red() {
+  cargo test --workspace -j3 >"$LOG" 2>&1
+  # Decide from the TEST OUTPUT, not from cargo's exit code: cargo prints a trailing
+  # `error: test failed, to rerun pass ...` after a red suite, which an `^error` grep matches and
+  # would misreport as "did not compile". Only when no test binary reported at all is it a build
+  # failure -- and then the tests never ran, so nothing was proven either way.
+  if grep -q "^test result:" "$LOG"; then
+    grep -q "test result: FAILED" "$LOG"
+  else
+    echo "  (no test binary reported -- the build failed, so the tests never ran;"
+    echo "   treating as NOT a caught mutation, because a mutation that cannot be"
+    echo "   compiled has not been shown to be detected)"
+    return 1
+  fi
+}
+
+show_red_tests() { grep -E "^test .* FAILED|^test result: FAILED" "$LOG" | head -6| sed 's/^/  /'; }
+
+run_mut() { # run_mut <name> <file> <old> <new>
+  local name="$1" f="$2" old="$3" new="$4"
+  RESTORE="$f"
   cp "$f" /tmp/mutation.bak
-  python3 - "$f" "$@" <<'PY' || { echo "  anchor not found -- refusing to run the mutation"; cp /tmp/mutation.bak "$f"; return 1; }
+  python3 - "$f" "$old" "$new" <<'PY' || { echo "  anchor not found -- refusing to run the mutation"; cp /tmp/mutation.bak "$f"; return 1; }
 import sys
-p=sys.argv[1]; s=open(p).read(); old=sys.argv[2]; new=sys.argv[3]
+p, old, new = sys.argv[1], sys.argv[2], sys.argv[3]
+s = open(p).read()
 assert old in s, "anchor not found"
-open(p,'w').write(s.replace(old,new,1))
+open(p,'w').write(s.replace(old, new, 1))
 PY
   echo "mutation $name applied to $f"
-  if cargo test --workspace -j3 2>&1 | grep -q "test result: FAILED"; then
-    echo "PASS: mutation $name was caught (suite went red)"; caught=$((caught+1))
+  if suite_is_red; then
+    echo "PASS: mutation $name was caught (suite went red)"; show_red_tests; caught=$((caught+1))
   else
     echo "FAIL: mutation $name SURVIVED -- the suite stayed green, so nothing pins this behaviour"
   fi
@@ -48,8 +78,8 @@ run_mut "B" crates/servelet-h1/src/wire.rs \
 
 echo
 echo "=== restored suite ==="
-if cargo test --workspace -j3 2>&1 | grep -q "test result: FAILED"; then
-  echo "FAIL: the suite is still red after restore"; exit 1
+if suite_is_red; then
+  echo "FAIL: the suite is still red after restore"; show_red_tests; exit 1
 fi
 echo "green again after restore"
 
