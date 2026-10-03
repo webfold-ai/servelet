@@ -78,6 +78,8 @@ pub struct Cookie<'c> {
     same_site: Option<SameSite>,
     max_age: Option<Duration>,
     path: Option<Cow<'c, str>>,
+    domain: Option<Cow<'c, str>>,
+    partitioned: bool,
 }
 
 impl<'c> Cookie<'c> {
@@ -91,6 +93,8 @@ impl<'c> Cookie<'c> {
             same_site: None,
             max_age: None,
             path: None,
+            domain: None,
+            partitioned: false,
         }
     }
 
@@ -109,8 +113,14 @@ impl<'c> Cookie<'c> {
     }
 
     /// Format as a `Set-Cookie` header value: `name=value; Attr; Attr=val; ...`.
+    ///
+    /// Nothing is validated and nothing is escaped: this is the moved byte-for-byte formatter.
+    /// Use [`Cookie::try_encoded`] when the name or value came from anywhere untrusted.
     pub fn encoded(&self) -> String {
         let mut s = format!("{}={}", self.name, self.value);
+        if let Some(domain) = &self.domain {
+            s.push_str(&format!("; Domain={domain}"));
+        }
         if let Some(path) = &self.path {
             s.push_str(&format!("; Path={path}"));
         }
@@ -125,6 +135,9 @@ impl<'c> Cookie<'c> {
         }
         if let Some(same_site) = self.same_site {
             s.push_str(&format!("; SameSite={}", same_site.as_str()));
+        }
+        if self.partitioned {
+            s.push_str("; Partitioned");
         }
         s
     }
@@ -178,7 +191,108 @@ impl<'c> CookieBuilder<'c> {
         self
     }
 
+    /// `Domain=<domain>` — the cookie is offered to that host and its subdomains. Added after the
+    /// move: biota's module had no `Domain` at all (`lib.rs:1910-2135` at rev `4ce2dcd`), and a
+    /// cross-subdomain session needs one. Serialized before `Path`, the order the real `cookie`
+    /// crate and nexus's `SetCookie` both use.
+    pub fn domain(mut self, domain: impl Into<Cow<'c, str>>) -> Self {
+        self.cookie.domain = Some(domain.into());
+        self
+    }
+
+    /// `Partitioned` (CHIPS). Requires `Secure`: a browser silently drops the whole cookie
+    /// otherwise, which is the worst failure mode a session has. [`Cookie::try_encoded`]
+    /// refuses the combination up front rather than letting it reach the wire.
+    pub fn partitioned(mut self, partitioned: bool) -> Self {
+        self.cookie.partitioned = partitioned;
+        self
+    }
+
     pub fn finish(self) -> Cookie<'c> {
         self.cookie
     }
+}
+
+// -- Added after the byte-for-byte move -----------------------------------
+//
+// `Domain`, `Partitioned`, and a refusing formatter. Spec: nexus's `SetCookie`
+// (`src/cookie.rs`) and its test (`tests/cookie.rs`), both read-only. biota's
+// module never validated anything and never had these two attributes
+// (`lib.rs:1910-2135`, rev `4ce2dcd`), which `runtime-auth.md` section 5 lists
+// as a capability gap.
+
+/// Why a cookie refused to become a `Set-Cookie` header value. Values are
+/// validated, never escaped: a name or value that could inject another attribute
+/// or a whole header is refused outright.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CookieError {
+    /// A name, value, path or domain holds a byte that is illegal in a cookie
+    /// (a control, a space, `;`, `,`, `"`, `\`).
+    InvalidToken(&'static str),
+    /// `SameSite=None` and `Partitioned` both require `Secure`; without it the
+    /// browser drops the cookie silently.
+    RequiresSecure(&'static str),
+}
+
+impl std::fmt::Display for CookieError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CookieError::InvalidToken(what) => write!(f, "invalid cookie {what}"),
+            CookieError::RequiresSecure(what) => write!(f, "{what} requires Secure"),
+        }
+    }
+}
+
+impl std::error::Error for CookieError {}
+
+impl<'c> Cookie<'c> {
+    /// [`Cookie::encoded`], but it refuses anything that could inject a second
+    /// attribute or a second header, and refuses `SameSite=None`/`Partitioned`
+    /// without `Secure`.
+    pub fn try_encoded(&self) -> Result<String, CookieError> {
+        if !valid_token(&self.name, false) {
+            return Err(CookieError::InvalidToken("name"));
+        }
+        if !valid_token(&self.value, true) {
+            return Err(CookieError::InvalidToken("value"));
+        }
+        if let Some(p) = &self.path {
+            if !valid_attr(p) {
+                return Err(CookieError::InvalidToken("path"));
+            }
+        }
+        if let Some(d) = &self.domain {
+            if !valid_attr(d) {
+                return Err(CookieError::InvalidToken("domain"));
+            }
+        }
+        if self.same_site == Some(SameSite::None) && !self.secure {
+            return Err(CookieError::RequiresSecure("SameSite=None"));
+        }
+        if self.partitioned && !self.secure {
+            return Err(CookieError::RequiresSecure("Partitioned"));
+        }
+        Ok(self.encoded())
+    }
+
+    /// A cookie that tells the browser to delete `name`: empty value, `Max-Age=0`.
+    pub fn expire(name: impl Into<Cow<'c, str>>) -> Self {
+        Cookie::build(name, "").max_age(Duration::ZERO).finish()
+    }
+}
+
+/// RFC 6265 cookie-octet, conservatively: visible ASCII except space, `"`,
+/// `,`, `;`, `\`. Names additionally exclude `=` and must be non-empty; values
+/// may be empty (that is how a cookie is deleted).
+fn valid_token(s: &str, allow_empty: bool) -> bool {
+    if s.is_empty() {
+        return allow_empty;
+    }
+    s.bytes().all(|b| (0x21..=0x7e).contains(&b) && !matches!(b, b'"' | b',' | b';' | b'\\'))
+        && (allow_empty || !s.contains('='))
+}
+
+/// Path and Domain attribute values: visible ASCII without `;` (and without CTLs).
+fn valid_attr(s: &str) -> bool {
+    !s.is_empty() && s.bytes().all(|b| (0x21..=0x7e).contains(&b) && b != b';')
 }
