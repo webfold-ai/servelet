@@ -258,6 +258,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "servelet-sse"
+version = "0.1.0"
+dependencies = [
+ "servelet-core",
+ "tokio",
+]
+
+[[package]]
 name = "servelet-tls"
 version = "0.1.0"
 dependencies = [
