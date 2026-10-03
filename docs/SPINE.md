@@ -42,11 +42,11 @@ OK   servelet-core/src/error.rs         code-lines=  18 verbatim=  18 deviations
 OK   servelet-core/src/types.rs         code-lines= 532 verbatim= 531 deviations= 1 unaccounted=0 (100.0%)
 OK   servelet-core/src/extensions.rs    code-lines=  55 verbatim=  55 deviations= 0 unaccounted=0 (100.0%)
 OK   servelet-core/src/message.rs       code-lines= 165 verbatim= 156 deviations= 9 unaccounted=0 (100.0%)
-OK   servelet-core/src/service.rs       code-lines= 104 verbatim=  98 deviations= 6 unaccounted=0 (100.0%)
+OK   servelet-core/src/service.rs       code-lines= 104 verbatim=  97 deviations= 7 unaccounted=0 (100.0%)
 OK   servelet-router/src/router.rs      code-lines= 267 verbatim= 263 deviations= 4 unaccounted=0 (100.0%)
 OK   servelet-router/src/lib.rs         code-lines=  11 verbatim=   6 deviations= 5 unaccounted=0 (100.0%)
 OK   servelet-h1/src/wire.rs            code-lines= 232 verbatim= 229 deviations= 3 unaccounted=0 (100.0%)
-OK   servelet-h1/src/streaming.rs       code-lines=  19 verbatim=   9 deviations=10 unaccounted=0 (100.0%)
+OK   servelet-h1/src/streaming.rs       code-lines=  19 verbatim=   8 deviations=11 unaccounted=0 (100.0%)
 OK   servelet-h1/src/graceful.rs        code-lines=  67 verbatim=  67 deviations= 0 unaccounted=0 (100.0%)
 OK   servelet-tls/src/tls.rs            code-lines=  81 verbatim=  81 deviations= 0 unaccounted=0 (100.0%)
 TOTAL 1551/1551 code lines verbatim in biota at 4ce2dcd
@@ -56,6 +56,9 @@ TOTAL 1551/1551 code lines verbatim in biota at 4ce2dcd
 recorded range or on the documented-deviation list below. It is a **line-level** check — it proves
 "this line is the line biota has at that range"; it does not prove the ranges are used exactly
 once. What it cannot prove is covered by the mutation checks (`scripts/mutation.sh`) and §5.
+`service.rs` and `streaming.rs` have the largest deviation counts because `streaming.rs` is mostly
+*new* helper code (see §2) and `service.rs` gained `+ Send` bounds — neither is a rewrite of
+moved logic.
 
 ---
 
@@ -149,10 +152,18 @@ crate against `budget/deps.tsv` and fails when a crate gets heavier. Numbers mea
 | `servelet-h1` | 45 | 45 |
 | `servelet-tls` | 56 | 56 |
 
-`biota-http-server` itself, same command on its own package, is **56** — the same as
-`servelet-tls`, the crate that ends up holding the same rustls/tokio set. The four crates together
-cover the spine and none is heavier than the one crate they came out of; that is the rule-6
-baseline. Counts include the workspace crates themselves.
+`biota-http-server`'s own count, by the same command against its exact `[dependencies]` block at
+`4ce2dcd`, is **92** (measured in a scratch package under `mktemp -d`, from
+`git -C ~/projects/biota show 4ce2dcd:http-server/Cargo.toml` — the shared checkout was never
+built in or written to). The **union of the four spine crates is 63**, and the heaviest single one
+is `servelet-tls` at 56. Every crate is a strict subset of the 92, so a consumer takes what it
+uses and nothing else — which is the whole point of the split. `servelet-core` at 25 and
+`servelet-router` at 42 are the light end: a consumer that only routes never links rustls.
+
+The 92 comes from the parts that stayed behind: the client, cookie jar, multipart and the
+`sangdb`/`transport`/`relayfold`/`modelfold` deps that proxy and Authzed bring. That weight is
+exactly what the "NOT YOURS" list would distribute across `servelet-client`, `servelet-cookie`,
+`servelet-multipart` and a later proxy crate.
 
 ---
 
