@@ -1,0 +1,26 @@
+[package]
+name = "servelet-sse"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Server-Sent Events: the framing and the streaming response body that carries it."
+publish = false
+
+[dependencies]
+servelet-core = { path = "../servelet-core" }
+servelet-cookie = { path = "../servelet-cookie" }
+# The chunk writer (`write_chunk`) and the streaming response body (`streaming`,
+# `StreamingBody`, `with_formatter`). One edge, and it points the right way: this crate owns
+# SSE framing, that crate owns the HTTP/1.1 wire it is written to.
+servelet-h1 = { path = "../servelet-h1" }
+# sync: `SseBody`'s Arc<Mutex<Receiver>> and the `Event` channel. macros + rt: the moved
+# `#[tokio::test]`. time: the keep-alive `timeout` in the writer.
+tokio = { workspace = true, features = ["sync", "macros", "rt"] }
+# json/json_ref: `hashtrinity::codec::syntax::render_surface`. Measured 4 hits, census section 7.
+hashtrinity.workspace = true
+
+[dev-dependencies]
+# The socket test drives the real path a consumer uses: a Router, h1's serve_connection, a real
+# listener. These are dev-only -- nothing in `src/` names them.
+servelet-router = { path = "../servelet-router" }
+tokio = { workspace = true, features = ["macros", "rt", "net", "io-util", "time"] }

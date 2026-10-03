@@ -23,6 +23,15 @@ import sys
 # crate file -> [(biota file, first line, last line), ...]   1-indexed, inclusive.
 # These are the ranges committed in budget/ranges.tsv and narrated in docs/SPINE.md.
 RANGES = {
+    # lib.rs `pub mod sse` (2137-2470): the streaming half 2138-2285 and the parse/emit half
+    # 2286-2418, both with their own `use` line's targets rewritten to the crates that own them.
+    "servelet-sse/src/sse.rs": [("lib.rs", 2138, 2285), ("lib.rs", 2286, 2418)],
+    # lib.rs: the `builder()` free fn and `HttpResponseBuilder`. 224-238 (`StreamingBody` and
+    # `Response::streaming_body`) is NOT here -- it belongs to servelet-h1 and moved there.
+    "servelet-sse/src/builder.rs": [("lib.rs", 92, 94), ("lib.rs", 128, 222)],
+    # kernel.rs: the SSE writer that `serve_connection` dispatched to. 3059-3065 is its doc
+    # comment, which is prose about this crate; the code is 3066-3130.
+    "servelet-sse/src/wire.rs": [("kernel.rs", 3059, 3130)],
     # lib.rs `pub mod cookie` (1910-2135): the module body, 1911-2134.
     "servelet-cookie/src/lib.rs": [("lib.rs", 1911, 2134)],
     "servelet-core/src/error.rs": [("kernel.rs", 60, 84)],
@@ -46,6 +55,42 @@ RANGES = {
 # Lines that are never in biota verbatim because they are a *deliberate, documented*
 # deviation (see docs/SPINE.md "Deviations"). Each is an exact, whole-line match.
 KNOWN_DEVIATIONS = {
+    # `crate::` -> the crate that owns the name now, `Responder`/`impl crate::Response` became
+    # an inherent method and a free function (rule 4 drops the actix trait), and the fields the
+    # sibling `wire.rs` reads went from `pub(crate)` to `pub` within this crate.
+    "servelet-sse/src/sse.rs": [
+        "    pub fn respond_to(self, _req: &servelet_core::Request) -> servelet_core::Response {",
+        "        let mut resp = servelet_core::Response::new(servelet_core::StatusCode::OK, Vec::new());",
+        "pub fn sse_body(resp: &servelet_core::Response) -> Option<SseBody> {",
+        "    resp.extensions().get::<SseBody>().cloned()",
+        "        let req = servelet_core::Request::new(servelet_core::Method::GET, \"/events/stream\".parse().unwrap());",
+        "        let body = sse_body(&resp).expect(\"SseBody must be stashed by respond_to\");",
+        "pub struct SseBody {",
+        "    pub rx: std::sync::Arc<tokio::sync::Mutex<Option<mpsc::Receiver<Event>>>>,",
+        "    pub keep_alive: Option<Duration>,",
+        "    pub retry: Option<Duration>,",
+        "    pub fn render_for_wire(&self) -> String {",
+        "    pub(crate) fn render(&self) -> String {",
+    ],
+    # `crate::HeaderMap`/`HeaderName`/`HeaderValue`/`header::` -> `servelet_core::`; and
+    # `streaming` now calls servelet-h1's `streaming(..)` instead of stashing its own
+    # crate-private `StreamingBody` (that type is servelet-h1's, and is what its writer looks for).
+    "servelet-sse/src/builder.rs": [
+        "HttpResponseBuilder { status, headers: servelet_core::HeaderMap::new(), cookies: Vec::new() }",
+        "headers: servelet_core::HeaderMap,",
+        "    header: (impl Into<servelet_core::HeaderName>, impl Into<servelet_core::HeaderValue>),",
+        "pub fn content_type(&mut self, mime: impl Into<servelet_core::HeaderValue>) -> &mut Self {",
+        "    self.headers.insert(servelet_core::header::CONTENT_TYPE, mime);",
+        "        resp.headers_mut().append(servelet_core::header::SET_COOKIE, cookie.encoded());",
+        "        let resp = self.build(self.status, Vec::new());",
+        "        servelet_h1::streaming(resp, rx)",
+    ],
+    # The moved `use` lines of `kernel.rs`, and `crate::httpsrv::httpx::sse::SseBody` ->
+    # `crate::sse::SseBody` (same crate now).
+    "servelet-sse/src/wire.rs": [
+        "    sse_body: crate::sse::SseBody,",
+        "pub(crate) async fn write_sse_response<W: AsyncWriteExt + Unpin>(",
+    ],
     # `#![forbid(unsafe_code)]` — the crate-level lint every servelet crate opens with.
     "servelet-cookie/src/lib.rs": [
         "#![forbid(unsafe_code)]",
@@ -92,12 +137,10 @@ KNOWN_DEVIATIONS = {
     ],
     # `crate::httpsrv::actix::StreamingBody` -> this crate's own `crate::StreamingBody`.
     "servelet-h1/src/wire.rs": [
-        "            let mut resp = resp;",
-        "            let formatter = crate::streaming::take_formatter(&mut resp);",
+        "        let mut resp = router.handle(req).await;",
+        "        if let Some(formatter) = crate::streaming::take_formatter(&mut resp) {",
         "            let mut writer: &mut (dyn tokio::io::AsyncWrite + Unpin + Send) = &mut reader;",
-        "            let written = match formatter {",
-        "                Some(f) => (f)(&mut writer, resp, streaming_body).await,",
-        "                None => write_streaming_response(&mut writer, resp, streaming_body).await,",
+        "            let written = (formatter)(&mut writer, resp).await;",
         "            if let Err(e) = written {",
         "pub async fn write_chunk<W: AsyncWriteExt + Unpin>(writer: &mut W, data: &[u8]) -> Result<()> {",
         "        if let Some(streaming_body) = crate::streaming_body(&resp) {",

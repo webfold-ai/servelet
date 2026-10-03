@@ -4,3 +4,4 @@ servelet-router	42
 servelet-h1	45
 servelet-tls	56
 servelet-cookie	1
+servelet-sse	48

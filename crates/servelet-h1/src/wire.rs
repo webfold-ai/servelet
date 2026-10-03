@@ -153,25 +153,25 @@ pub async fn serve_connection<S: AsyncRead + AsyncWrite + Unpin + Send + 'static
             }
         };
         let keep = req.version() != Version::HTTP_10 && !connection_close(req.headers());
-        let resp = router.handle(req).await;
+        let mut resp = router.handle(req).await;
         // CUT (docs/SPINE.md "Deviations"): the SSE branch that stood here is `servelet-sse`'s
         // to reinstate. It dispatched on `Response::sse_body()`, a method whose type
         // (`crate::httpsrv::httpx::sse::SseBody`) is another crate's. The generic streaming branch
         // below is untouched: an SSE body is stashed the same way and, without its formatter,
         // still goes out as real chunked bytes.
-        if let Some(streaming_body) = crate::streaming_body(&resp) {
-            // The crate that owns the framing for this body stashed a writer for it (SSE does,
-            // `servelet-sse`); with none stashed, this crate's own chunked writer runs. Erasing
-            // the concrete reader type here is what lets a formatter written against any
-            // `AsyncWrite` be stored in the response and used here.
-            let mut resp = resp;
-            let formatter = crate::streaming::take_formatter(&mut resp);
+        // A response that carries a writer for its own body (SSE does; `servelet-sse`) is
+        // written by that writer. Erasing the concrete reader type here is what lets a writer
+        // written against any `AsyncWrite` be stored in the response and used here.
+        if let Some(formatter) = crate::streaming::take_formatter(&mut resp) {
             let mut writer: &mut (dyn tokio::io::AsyncWrite + Unpin + Send) = &mut reader;
-            let written = match formatter {
-                Some(f) => (f)(&mut writer, resp, streaming_body).await,
-                None => write_streaming_response(&mut writer, resp, streaming_body).await,
-            };
+            let written = (formatter)(&mut writer, resp).await;
             if let Err(e) = written {
+                eprintln!("DEBUG  target=bedrock::serve");  // was: DEBUG target: "bedrock::serve", error = %e, "connection closed during streaming response"
+            }
+            break;
+        }
+        if let Some(streaming_body) = crate::streaming_body(&resp) {
+            if let Err(e) = write_streaming_response(&mut reader, resp, streaming_body).await {
                 eprintln!("DEBUG  target=bedrock::serve");  // was: DEBUG target: "bedrock::serve", error = %e, "connection closed during streaming response"
             }
             break;

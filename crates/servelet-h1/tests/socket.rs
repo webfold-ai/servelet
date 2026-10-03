@@ -236,9 +236,7 @@ async fn a_stashed_formatter_is_the_one_that_writes_the_stream() {
         "/fmt",
         move |_req| {
             let fmt: servelet_h1::StreamFormatter = std::sync::Arc::new(
-                |mut writer: &mut (dyn tokio::io::AsyncWrite + Unpin + Send),
-                 resp,
-                 body| {
+                |mut writer: &mut (dyn tokio::io::AsyncWrite + Unpin + Send), resp| {
                     Box::pin(async move {
                         use tokio::io::AsyncWriteExt;
                         let mut head = format!(
@@ -249,6 +247,8 @@ async fn a_stashed_formatter_is_the_one_that_writes_the_stream() {
                         );
                         head.push_str("x-formatter: used\r\n\r\n");
                         writer.write_all(head.as_bytes()).await?;
+                        let body = servelet_h1::streaming_body(&resp)
+                            .expect("this response was built with a streaming body");
                         let mut rx = take_receiver(body).await?;
                         while let Some(next) = rx.recv().await {
                             let bytes = next.map_err(servelet_core::Error::Http)?;

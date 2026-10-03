@@ -77,8 +77,13 @@ pub async fn take_receiver(body: StreamingBody) -> Result<tokio::sync::mpsc::Rec
 // takes it out if it is there and uses the default writer if it is not. This crate never names
 // the SSE type.
 
-/// Writes a streaming response body to the wire. `servelet-h1`'s own default is
-/// `write_streaming_response`; `servelet-sse` supplies its own with SSE framing.
+/// Writes a streaming RESPONSE to the wire, body and all. `servelet-h1`'s own default is
+/// `write_streaming_response` over a [`StreamingBody`]; `servelet-sse` supplies its own, over the
+/// SSE body it stashed.
+///
+/// The whole response, not a body: a body type this crate does not know (SSE's) has to be
+/// reachable from here, and a formatter that pulls its own body out of the response it was handed
+/// is the only shape that works without this crate naming it.
 ///
 /// Higher-ranked over the writer's lifetime on purpose: the future writes to the stream it was
 /// given, so it borrows it. It is awaited in place, never spawned, which is why the lifetime is
@@ -87,14 +92,13 @@ pub type StreamFormatter = std::sync::Arc<
     dyn for<'w> Fn(
             &'w mut (dyn tokio::io::AsyncWrite + Unpin + Send),
             Response,
-            StreamingBody,
         ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'w>>
         + Send
         + Sync,
 >;
 
-/// Stash a formatter on a response whose body is a [`StreamingBody`]. Called by the crate that
-/// owns the framing; `serve_connection` picks it up.
+/// Stash a formatter on a response that carries a streaming body of some kind. Called by the
+/// crate that owns the framing; `serve_connection` picks it up.
 pub fn with_formatter(mut resp: Response, formatter: StreamFormatter) -> Response {
     resp.extensions_mut().insert(formatter);
     resp

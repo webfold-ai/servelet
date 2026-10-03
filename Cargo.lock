@@ -262,6 +262,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "servelet-sse"
+version = "0.1.0"
+dependencies = [
+ "hashtrinity",
+ "servelet-cookie",
+ "servelet-core",
+ "servelet-h1",
+ "servelet-router",
+ "tokio",
+]
+
+[[package]]
 name = "servelet-tls"
 version = "0.1.0"
 dependencies = [

@@ -14,3 +14,6 @@ servelet-router	servelet-router/src/lib.rs	4ce2dcd	http-server/src/kernel/platfo
 servelet-router	servelet-router/src/router.rs	4ce2dcd	http-server/src/kernel.rs	2446	2815
 servelet-tls	servelet-tls/src/tls.rs	4ce2dcd	http-server/src/kernel.rs	1854	1968
 servelet-cookie	servelet-cookie/src/lib.rs	4ce2dcd	http-server/src/lib.rs	1911	2134
+servelet-sse	crates/servelet-sse/src/sse.rs	4ce2dcd	http-server/src/lib.rs	2138	2418
+servelet-sse	crates/servelet-sse/src/builder.rs	4ce2dcd	http-server/src/lib.rs	92	222
+servelet-sse	crates/servelet-sse/src/wire.rs	4ce2dcd	http-server/src/kernel.rs	3059	3130

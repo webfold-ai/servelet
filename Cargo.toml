@@ -5,6 +5,7 @@ members = [
     "crates/servelet-core",
     "crates/servelet-router",
     "crates/servelet-h1",
+    "crates/servelet-sse",
     "crates/servelet-tls",
 ]
 
