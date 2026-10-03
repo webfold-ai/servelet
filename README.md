@@ -51,9 +51,20 @@ old copy is deleted in the same change: one home per capability, never a wrapper
 | `servelet-authed` | router wrapper that cannot register an unauthenticated handler | nexus `authed.rs` |
 | `servelet-openapi` | OpenAPI document generation from routes | `lib.rs` `openapi` |
 
-Candidates to leave out entirely (rule 4), decided in `docs/EXTRACTION.md` with evidence of who calls them:
-`x402`, `graphql`, `s3_gateway`, `webhook`, `nel`, `filter`, and the five `*_masq` compatibility shims.
+What is extracted and what is left out is decided per module in `docs/EXTRACTION.md`, from a census of
+BOTH copies (biota's `http-server` and bedrock's `native_lib.rs`), with file:line callers. Correction
+2026-10-04: this README first said `x402`, `webhook`, `s3_gateway`, `h2`, `websocket` and `openapi` had no
+callers. That was wrong: it had searched only `biota_http_server::`. The bedrock copy's consumers call them
+(webhook 135 sites, websocket 93, x402 72, h2 29, openapi 22, s3_gateway 16), mostly from repos being retired
+(opsfold, syndesi). Whether those callers are live, and so whether each module is extracted or dropped, is a
+per-row decision in EXTRACTION.md, not an assumption.
+
+The first consumer is nexus, which uses exactly 12 public names: servelet-core, -router, -h1, -sse and -cookie
+cover all of it. The outbound `Client` (34 call sites across ptyktos-api, relayfold, ptyktos-webgui,
+webfold-fleet) and a replacement for the actix-style boot path (`App`, `HttpServer`, `to_handler*_async`) are
+what blocks the other consumers.
 
 ## Status
 
-Skeleton. See `docs/EXTRACTION.md` for the plan and the evidence it is built on.
+Spine (core, router, h1, tls) extracted, gates in `scripts/`. Next: servelet-sse, -cookie, -client, -uri.
+See `docs/EXTRACTION.md` for the plan and `docs/MIGRATION.md` for the consumers.
