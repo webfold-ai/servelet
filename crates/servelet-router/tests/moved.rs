@@ -241,7 +241,7 @@ async fn router_merge_combines_two_routers() {
 #[tokio::test]
 async fn router_fallback_catches_unmatched_requests() {
     let router = Router::new()
-        .route_sync(Method::GET, "/known", |_req| Response::ok("known"))
+        .route_sync(Method::GET, "/known-MUTATED", |_req| Response::ok("known"))
         .fallback(|_req| async { Response::new(StatusCode::NOT_FOUND, "custom-fallback") });
 
     let resp = router.handle(Request::new(Method::GET, "/unknown".parse().unwrap())).await;
