@@ -1,13 +1,10 @@
-/// Bind with `SO_REUSEPORT` set — lets a second (new) process bind the SAME address:port
-/// concurrently instead of failing with `EADDRINUSE`, which is what makes the rolling handover
-/// possible at all.
-pub async fn bind_reuseport(addr: SocketAddr) -> Result<TcpListener> {
-    let socket = if addr.is_ipv4() { TcpSocket::new_v4()? } else { TcpSocket::new_v6()? };
-    socket.set_reuseport(true)?;
-    socket.set_reuseaddr(true)?;
-    socket.bind(addr)?;
-    Ok(socket.listen(1024)?)
-}
+//! Graceful drain — moved byte-for-byte from `biota/http-server`'s `kernel/runtime.rs` at rev
+//! `4ce2dcd` (the `graceful` module: `bind_reuseport`, `ConnectionCounter`/`ConnectionGuard`,
+//! `serve_gracefully`). Decided HTTP: it is a TCP accept loop that hands every accepted stream to
+//! `serve_connection`, i.e. it is the h1 serve loop, not HTTP/2 framing.
+
+use super::*;
+use crate::wire::serve_connection;
 
 /// How many connections are currently in flight. The drain condition is exactly `Web.lean`'s
 /// `encircle_iff` at the single-process scale: shutdown is complete iff this residual reads

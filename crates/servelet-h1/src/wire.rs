@@ -1,3 +1,7 @@
+//! The wire, byte-for-byte from `biota/http-server`'s `kernel.rs` at rev `4ce2dcd`.
+
+use super::*;
+
 async fn read_request_buffered<R: AsyncReadExt + AsyncWriteExt + Unpin>(
     reader: &mut BufReader<R>,
 ) -> Result<Request> {
@@ -133,20 +137,10 @@ pub async fn serve_connection<S: AsyncRead + AsyncWrite + Unpin + Send + 'static
     peer_addr: Option<std::net::SocketAddr>,
 ) {
     let mut reader = BufReader::with_capacity(8192, stream);
-    // Peek for the h2c connection preface (RFC 7540 §3.4, "prior knowledge") before assuming
-    // HTTP/1.1 line framing — a real gRPC/h2c client sends this preface unprompted, first thing.
-    // `fill_buf` peeks without consuming, so a non-h2c connection falls through to the existing
-    // line parser with its bytes untouched (`BufReader<TcpStream>` forwards `AsyncWrite` to the
-    // inner stream, so the same reader serves both directions for the HTTP/1.1 path too).
-    let is_h2c = matches!(
-        reader.fill_buf().await,
-        Ok(buf) if buf.len() >= crate::httpsrv::httpx::h2::PREFACE.len() && &buf[..crate::httpsrv::httpx::h2::PREFACE.len()] == crate::httpsrv::httpx::h2::PREFACE.as_slice()
-    );
-    if is_h2c {
-        reader.consume(crate::httpsrv::httpx::h2::PREFACE.len());
-        crate::httpsrv::httpx::h2::serve_h2c_connection(reader, router).await;
-        return;
-    }
+    // CUT (docs/SPINE.md "Deviations"): the h2c-preface sniff (RFC 7540 3.4, "prior knowledge")
+    // that stood here is `servelet-h2`'s to reinstate. It matched
+    // `crate::httpsrv::httpx::h2::PREFACE`, another crate's constant. Everything after the sniff
+    // is HTTP/1.1 line framing, byte-for-byte unchanged.
     loop {
         let req = match read_request_buffered(&mut reader).await {
             Ok(req) => match peer_addr {
@@ -160,16 +154,12 @@ pub async fn serve_connection<S: AsyncRead + AsyncWrite + Unpin + Send + 'static
         };
         let keep = req.version() != Version::HTTP_10 && !connection_close(req.headers());
         let resp = router.handle(req).await;
-        if let Some(sse_body) = resp.sse_body() {
-            // An SSE stream owns the connection for its whole lifetime (the client only ever
-            // sends the one request that opens it) — write it and close, never fall through to
-            // the keep-alive request loop below.
-            if let Err(e) = write_sse_response(&mut reader, resp, sse_body).await {
-                eprintln!("DEBUG  target=bedrock::serve");  // was: DEBUG target: "bedrock::serve", error = %e, "connection closed during SSE stream"
-            }
-            break;
-        }
-        if let Some(streaming_body) = resp.streaming_body() {
+        // CUT (docs/SPINE.md "Deviations"): the SSE branch that stood here is `servelet-sse`'s
+        // to reinstate. It dispatched on `Response::sse_body()`, a method whose type
+        // (`crate::httpsrv::httpx::sse::SseBody`) is another crate's. The generic streaming branch
+        // below is untouched: an SSE body is stashed the same way and, without its formatter,
+        // still goes out as real chunked bytes.
+        if let Some(streaming_body) = crate::streaming_body(&resp) {
             if let Err(e) = write_streaming_response(&mut reader, resp, streaming_body).await {
                 eprintln!("DEBUG  target=bedrock::serve");  // was: DEBUG target: "bedrock::serve", error = %e, "connection closed during streaming response"
             }
@@ -189,6 +179,7 @@ pub async fn serve_connection<S: AsyncRead + AsyncWrite + Unpin + Send + 'static
     // TLS close_notify"), not merely a latency/cosmetic difference.
     let _ = reader.shutdown().await;
 }
+
 fn connection_close(headers: &HeaderMap) -> bool {
     headers
         .get(header::CONNECTION)
@@ -240,6 +231,14 @@ pub async fn write_response<W: AsyncWriteExt + Unpin>(
     writer.write_all(&buf).await?;
     Ok(())
 }
+
+/// Writes an SSE response as real chunked transfer-encoding, one chunk per event, as they
+/// arrive from the channel `crate::httpsrv::httpx::sse::Sse::respond_to` stashed — not a buffered fake. The
+/// connection is dedicated to this stream until the channel closes (or a keep-alive period
+/// elapses with nothing to send, in which case a `: keep-alive\n\n` comment chunk goes out
+/// instead of a real event) — see `serve_connection`, which never falls through to its normal
+/// keep-alive request loop after this returns.
+
 /// One HTTP chunked-transfer-encoding frame (`{hex-len}\r\n{data}\r\n`) — shared by the SSE and
 /// generic streaming writers, the two response paths that write a body incrementally rather than
 /// all at once.
@@ -260,7 +259,7 @@ async fn write_chunk<W: AsyncWriteExt + Unpin>(writer: &mut W, data: &[u8]) -> R
 async fn write_streaming_response<W: AsyncWriteExt + Unpin>(
     writer: &mut W,
     mut response: Response,
-    streaming_body: crate::httpsrv::actix::StreamingBody,
+    streaming_body: crate::StreamingBody,
 ) -> Result<()> {
     response.headers.insert(header::TRANSFER_ENCODING, "chunked");
     response.headers.insert(header::CONNECTION, "close");
@@ -285,12 +284,7 @@ async fn write_streaming_response<W: AsyncWriteExt + Unpin>(
     writer.write_all(&head).await?;
     writer.flush().await?;
 
-    let mut rx = streaming_body
-        .rx
-        .lock()
-        .await
-        .take()
-        .expect("StreamingBody's receiver is stashed exactly once per response and consumed exactly once, here");
+    let mut rx = crate::streaming::take_receiver(streaming_body).await?;
 
     while let Some(next) = rx.recv().await {
         match next {
