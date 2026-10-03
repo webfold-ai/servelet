@@ -11,6 +11,7 @@
 #   D. servelet-cookie: stop enforcing "Partitioned requires Secure".
 #   E. servelet-sse:    mislabel the keep-alive comment chunk on the wire.
 #   F. servelet-uri:    stop escaping the space in a URL component.
+#   G. servelet-client: cap the keepalive pool at zero, so nothing is ever reused.
 #
 # Exit 0 only if both mutations were caught AND the restored suite is green.
 set -uo pipefail
@@ -18,7 +19,7 @@ cd "$(dirname "$0")/.."
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/home/ctown/.cache/cargo-target-servelet-spine}"
 export CARGO_INCREMENTAL=0
 
-caught=0; total=6
+caught=0; total=7
 LOG=$(mktemp)
 trap 'cp /tmp/mutation.bak "$RESTORE" 2>/dev/null || true' EXIT
 RESTORE=""
@@ -103,6 +104,12 @@ echo "=== mutation F: stop escaping a space in percent_encode ==="
 run_mut "F" crates/servelet-uri/src/lib.rs \
   "b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {" \
   "b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b' ' => {"
+
+echo
+echo "=== mutation G: stop reusing pooled connections (cap them at zero) ==="
+run_mut "G" crates/servelet-client/src/pool.rs \
+  'const POOL_CAP_PER_IDENTITY: usize = 32;' \
+  'const POOL_CAP_PER_IDENTITY: usize = 0;'
 
 echo
 echo "=== restored suite ==="

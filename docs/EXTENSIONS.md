@@ -124,7 +124,72 @@ runtime into the one crate that must work without one (`servelet-core/src/lib.rs
 reactor, no runtime, no sockets."). The only cross-crate edge is `cookies: Vec<Cookie<'static>>`,
 and that edge points at `servelet-cookie`, which `servelet-sse` already depends on.
 
-## 4. Still to be extracted by later units (recorded here so nothing is lost)
+## 4. The formatter seam (`servelet-h1` ⇄ `servelet-sse`)
+
+**Commits:** `feat(h1): a formatter seam…` and `feat(sse): servelet-sse…`.
+
+**The problem.** In biota, `serve_connection` (kernel.rs) named `write_sse_response` (kernel.rs)
+directly, because both were in one crate. `servelet-sse` needs to own the SSE framing and
+`servelet-h1` must not depend on it (rule 2: no crate needs to know another exists unless it is
+named in its `Cargo.toml`, and the reverse edge would make the wire crate know the framing crate).
+
+**The seam.** A response carries the writer that should drain it. `servelet-h1` defines
+`StreamFormatter` (`crates/servelet-h1/src/streaming.rs`); `serve_connection` takes one out of the
+response's extensions if it is there, and runs its own chunked writer if it is not. The value
+travels next to the body it writes, which is where the dispatch always started. No global, no
+registry, no "installed once" (rule 3), and `servelet-h1` never names an SSE type.
+
+**Two shapes, and why the second.** The first version passed the `StreamingBody` to the
+formatter. That cannot work: an SSE body is a different type, and the crate that knows it is the
+one that must be able to use it. The formatter now takes the whole `Response` and pulls its own
+body out — the only shape that works without `servelet-h1` naming the body.
+
+**Higher-ranked over the writer's lifetime.** The future writes to the stream it was handed, so
+it borrows it. It is awaited in place, never spawned, which is why it does not need to be
+`'static` and why nothing in the seam can outlive the connection.
+
+**Proved, not claimed.** `crates/servelet-h1/tests/socket.rs` asserts over a real socket that a
+stashed formatter's header and bytes reach the wire *and* that the chunked framing it did not ask
+for is absent, and that a response with no formatter still gets the default writer.
+`crates/servelet-sse/tests/socket.rs` then drives the SSE path end to end.
+
+## 5. `servelet-client`: the three deviations, and the optional TLS feature
+
+**Commit:** `feat(client): servelet-client…`. Parent is the pure move.
+
+**1. `splitmix64` is defined in-crate.** biota re-exported it from `transport`
+(`kernel.rs:3221`; `http-server/Cargo.toml:31`). The census (§7) measured `transport` at **zero**
+hits in the client's span, and a five-line public-domain mixing function does not justify pulling
+in a crate whose own tree carries TLS and a load balancer. Same algorithm, same constants,
+byte-identical output. Copied from `transport/src/http_client.rs:21`.
+
+**2. `connection_close` is duplicated.** biota had exactly **one** copy (`kernel.rs:3008`), in the
+*server* half, and the client called it from across the same crate. It now lives in
+`servelet-h1`, where the server half moved. Making `servelet-client` depend on `servelet-h1` to
+read one header would drag the router, the accept loop and the graceful drain into an HTTP client.
+Six lines, byte-identical expression.
+
+**3. Visibility.** `CookieJar`, `StoredCookie`, `parse_http_date`, `parse_rfc3339`,
+`cookie_path_matches` and `is_expired` were private inside one big crate and are `pub` here,
+because the twelve moved tests reach them. No behaviour change.
+
+**Client TLS is behind an off-by-default feature** (rule 6), and that is a measured claim:
+
+| features | `cargo tree -p servelet-client --prefix none \| sort -u \| wc -l` |
+|---|---|
+| default (`[]`) | **36** |
+| `tls` | **47** |
+
+The census (§7) said client TLS was *optional*; it did not say it was cheap. It is eleven
+packages — `rustls`, `ring`, `rustls-native-certs`, `rustls-pki-types` among them — which is
+exactly what the feature exists to keep away from a plaintext consumer.
+
+**Without the feature an `https://` URL returns `Error::Tls` naming the feature.** It does not
+silently downgrade; a client that quietly spoke plaintext to a TLS port would be a security bug,
+not a default. `crates/servelet-client/tests/tls_feature.rs` asserts both halves of that and runs
+green with the feature on and off.
+
+## 6. Still to be extracted by later units (recorded here so nothing is lost)
 
 Not in this unit's scope, from `docs/EXTRACTION.md` §9.1, in census order: `servelet-h2` (29
 bedrock-era callers), `servelet-ws` (93), `servelet-openapi` (22), `servelet-acme` (0 callers,

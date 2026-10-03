@@ -32,6 +32,11 @@ RANGES = {
     # kernel.rs: the SSE writer that `serve_connection` dispatched to. 3059-3065 is its doc
     # comment, which is prose about this crate; the code is 3066-3130.
     "servelet-sse/src/wire.rs": [("kernel.rs", 3059, 3130)],
+    # kernel.rs: the Reqwest face, the wire, the client TLS config, the pool, and the send path.
+    "servelet-client/src/reqwest.rs": [("kernel.rs", 1065, 1673)],
+    "servelet-client/src/stream.rs": [("kernel.rs", 1674, 1825), ("kernel.rs", 1826, 1852)],
+    "servelet-client/src/pool.rs": [("kernel.rs", 1970, 2083)],
+    "servelet-client/src/send.rs": [("kernel.rs", 2085, 2444)],
     # helpers.rs: `percent_decode` (77-111) and `percent_encode` (113-131).
     "servelet-uri/src/lib.rs": [("helpers.rs", 77, 111), ("helpers.rs", 113, 131)],
     "servelet-cookie/src/lib.rs": [("lib.rs", 1911, 2134)],
@@ -57,6 +62,89 @@ RANGES = {
 # deviation (see docs/SPINE.md "Deviations"). Each is an exact, whole-line match.
 KNOWN_DEVIATIONS = {
     "servelet-uri/src/lib.rs": ["#![forbid(unsafe_code)]"],
+    # NOTE on the entries below that appear many times: `KNOWN_DEVIATIONS` is a SET of whole
+    # lines, so a line repeated five times is accounted for once and matched five times. The
+    # arms it covers are the `#[cfg(feature = "tls")]`-guarded `Stream::Tls(..)` match arms in
+    # `stream.rs`, and the `#[cfg(not(feature = "tls"))]` https arm in `pool.rs`.
+    # The client's `use` lines (biota kept them once at the top of kernel.rs), the TLS arms
+    # behind the crate's off-by-default `tls` feature, and the items the moved tests reach that
+    # were `fn`/`struct` inside the one big crate and are `pub` here.
+    "servelet-client/src/reqwest.rs": [
+        "fn splitmix64(x: u64) -> u64 {",
+        "pub struct CookieJar {",
+        "pub struct StoredCookie {",
+        "pub fn parse_http_date(s: &str) -> Option<std::time::SystemTime> {",
+        "    pub fn is_expired(&self) -> bool {",
+        "pub fn cookie_path_matches(cookie_path: &str, request_path: &str) -> bool {",
+        "    pub fn store(&mut self, domain: &str, set_cookie: &str) {",
+        "    pub fn header_for(&self, domain: &str, request_path: &str, is_secure_request: bool) -> Option<String> {",
+        # splitmix64, verbatim from transport's http_client.rs (Ptyktos/transport) -- the crate
+        # biota re-exported it from. Documented in the source and in docs/EXTENSIONS.md.
+        "    let x = x.wrapping_add(0x9E3779B97F4A7C15);",
+        "    let z = (x ^ (x >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);",
+        "    let z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);",
+        "    z ^ (z >> 31)",
+        "#[cfg(feature = \"tls\")]",          # column 0 (the `match uri.scheme_str()` arm)
+        '        #[cfg(feature = "tls")]',    # column 8 (inside `connect_fresh`)
+        '        #[cfg(not(feature = "tls"))]',
+    ],
+    "servelet-client/src/stream.rs": [
+        "use std::io;",
+        "use tokio::io::{AsyncReadExt, AsyncWriteExt};",
+        "use tokio::net::TcpStream;",
+        "    #[cfg(feature = \"tls\")]",
+        "pub(crate) fn tls_config() -> std::sync::Arc<rustls::ClientConfig> {",
+        "    pub async fn read_exact_into(&mut self, buf: &mut [u8]) -> io::Result<()> {",
+        "    pub async fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {",
+        "    pub async fn read_exact(&mut self, len: usize) -> io::Result<Vec<u8>> {",
+        "    pub async fn read_to_end(&mut self, out: &mut Vec<u8>) -> io::Result<usize> {",
+        "    pub async fn read_some(&mut self, max: usize, buf: &mut [u8]) -> io::Result<usize> {",
+        '    #[cfg(feature = "tls")]',
+        '            #[cfg(feature = "tls")]',
+    ],
+    "servelet-client/src/pool.rs": [
+        "use std::collections::HashMap;",
+        "use std::sync::{Arc, Mutex, OnceLock};",
+        "use hashtrinity::{Coord, CoordMap, PHI};",
+        "use tokio::net::TcpStream;",
+        "use crate::stream::Stream;",
+        "#[cfg(feature = \"tls\")]",
+        "use crate::stream::tls_config;",
+        "use servelet_core::{host_port, Error, Result, Uri};",
+        "pub(crate) struct PooledConn {",
+        "    pub(crate) stream: Stream,",
+        "    pub(crate) leftover: Vec<u8>,",
+        "pub(crate) fn pool() -> &'static std::sync::Mutex<CoordMap<u64, Vec<PooledConn>>> {",
+        "pub(crate) fn identity_for(uri: &Uri) -> Result<String> {",
+        "pub(crate) async fn connect(uri: &Uri, resolve: &std::collections::HashMap<String, std::net::SocketAddr>) -> Result<(Stream, bool)> {",
+        "pub(crate) async fn connect_fresh(",
+        "pub(crate) fn pool_take(identity: &str) -> Option<PooledConn> {",
+        "pub(crate) fn pool_put(identity: &str, conn: PooledConn) {",
+        "#[cfg(feature = \"tls\")]",
+        "#[cfg(not(feature = \"tls\")]",
+        '        Some("https") => Err(Error::Tls(',
+        '            "an https:// URL needs this crate\'s `tls` feature (rustls, tokio-rustls and the \\',
+        "             system trust store); it is off by default so a plaintext consumer links no TLS \\",
+        '             stack -- turn it on with `features = [\\"tls\\"]`".to_string(),',
+        "        )),",
+        "#[cfg(feature = \"tls\")]",
+        '        #[cfg(feature = "tls")]',
+        '        #[cfg(not(feature = "tls"))]',
+    ],
+    "servelet-client/src/send.rs": [
+        "use std::io;",
+        "use std::str;",
+        "use servelet_core::{header, Error, Extensions, HeaderMap, HeaderName, HeaderValue, Method, Response, Result, StatusCode, Uri, Version};",
+        "use crate::pool::{identity_for, pool_put, PooledConn};",
+        "use crate::stream::{Stream, StreamReader};",
+        "fn connection_close(headers: &HeaderMap) -> bool {",
+        "    headers",
+        "        .get(header::CONNECTION)",
+        "        .and_then(|v| v.to_str().ok())",
+        "        .map(|v| v.to_ascii_lowercase().contains(\"close\"))",
+        "pub(crate) async fn send_request(",
+        "pub(crate) async fn send_request_streaming(",
+    ],
     # `crate::` -> the crate that owns the name now, `Responder`/`impl crate::Response` became
     # an inherent method and a free function (rule 4 drops the actix trait), and the fields the
     # sibling `wire.rs` reads went from `pub(crate)` to `pub` within this crate.
@@ -222,7 +310,11 @@ def main():
                 c = code_line(line)
                 if c is not None:
                     pool.add(c)
+        # Compared STRIPPED, like the biota pool above: a deviation is about WHICH line it is,
+        # not about how far the moved crate happens to indent it. (Three of the client's
+        # deviations are bare `#[cfg(feature = "tls")]` lines at three different indents.)
         known = set(KNOWN_DEVIATIONS.get(rel, []))
+        known = {l.strip() for l in known}
         seen_known = set()
         unmatched = []
         n = 0
@@ -246,8 +338,8 @@ def main():
             if c in pool:
                 continue
             s = line.rstrip("\n")
-            if s in known:
-                seen_known.add(s)
+            if c in known:
+                seen_known.add(c)
                 continue
             unmatched.append(s)
         pct = 100.0 * (n - len(unmatched)) / max(n, 1)
@@ -265,6 +357,11 @@ def main():
         for line in unmatched:
             print("       unaccounted: %s" % line)
         for line in sorted(known - seen_known):
+            # A `use` line or a doc comment is skipped before it is ever compared (SKIP_PREFIX),
+            # so it can never appear in `seen_known`. Reporting those as stale would bury the
+            # real signal -- an entry that no longer matches because the code moved on.
+            if SKIP_PREFIX.match(line) or line.startswith("//"):
+                continue
             print("       note: documented deviation no longer present (stale entry): %s" % line)
     print("TOTAL %d/%d code lines verbatim in biota at %s" % (total_ok, total, args.rev))
     return 1 if failures else 0

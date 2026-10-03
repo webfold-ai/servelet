@@ -18,3 +18,7 @@ servelet-sse	crates/servelet-sse/src/sse.rs	4ce2dcd	http-server/src/lib.rs	2138	
 servelet-sse	crates/servelet-sse/src/builder.rs	4ce2dcd	http-server/src/lib.rs	92	222
 servelet-sse	crates/servelet-sse/src/wire.rs	4ce2dcd	http-server/src/kernel.rs	3059	3130
 servelet-uri	servelet-uri/src/lib.rs	4ce2dcd	http-server/src/helpers.rs	77	131
+servelet-client	servelet-client/src/reqwest.rs	4ce2dcd	http-server/src/kernel.rs	1065	1673
+servelet-client	servelet-client/src/stream.rs	4ce2dcd	http-server/src/kernel.rs	1674	1852
+servelet-client	servelet-client/src/pool.rs	4ce2dcd	http-server/src/kernel.rs	1970	2083
+servelet-client	servelet-client/src/send.rs	4ce2dcd	http-server/src/kernel.rs	2085	2444
