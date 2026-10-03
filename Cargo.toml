@@ -1,0 +1,40 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/servelet-core",
+    "crates/servelet-router",
+    "crates/servelet-h1",
+    "crates/servelet-tls",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+# One hashtrinity for every crate. Hard rule 5: the GitLab mirror, branch `main`, exactly as
+# nexus/Cargo.toml has it — the GitHub copy does not unify with sangdb (proven there).
+hashtrinity = { git = "https://gitlab.tas.twn.network/twn/ptyktos/hashtrinity.git", branch = "main", features = ["codec", "validate", "error", "derive"] }
+
+# Shared, minimal tokio. `default-features = false` everywhere so no crate inherits a feature
+# (the `full` blowup, or `rt-multi-thread`) it does not name itself.
+tokio = { version = "1", default-features = false }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+rustls-pki-types = "1"
+tracing = { version = "0.1", default-features = false, features = ["std", "attributes"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "fmt"] }
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.test]
+debug = "line-tables-only"
+
+[profile.test.package."*"]
+debug = false

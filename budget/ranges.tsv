@@ -1,0 +1,15 @@
+crate	file	biota_rev	biota_file	first	last
+servelet-core	servelet-core/src/error.rs	4ce2dcd	http-server/src/kernel.rs	60	84
+servelet-core	servelet-core/src/extensions.rs	4ce2dcd	http-server/src/kernel.rs	732	830
+servelet-core	servelet-core/src/message.rs	4ce2dcd	http-server/src/kernel.rs	831	1064
+servelet-core	servelet-core/src/service.rs	4ce2dcd	http-server/src/kernel/platform.rs	353	440
+servelet-core	servelet-core/src/service.rs	4ce2dcd	http-server/src/kernel/platform.rs	484	573
+servelet-core	servelet-core/src/types.rs	4ce2dcd	http-server/src/kernel.rs	86	731
+servelet-h1	servelet-h1/src/graceful.rs	4ce2dcd	http-server/src/kernel/runtime.rs	2073	2320
+servelet-h1	servelet-h1/src/streaming.rs	4ce2dcd	http-server/src/lib.rs	200	203
+servelet-h1	servelet-h1/src/streaming.rs	4ce2dcd	http-server/src/lib.rs	229	238
+servelet-h1	servelet-h1/src/wire.rs	4ce2dcd	http-server/src/kernel.rs	2816	3065
+servelet-h1	servelet-h1/src/wire.rs	4ce2dcd	http-server/src/kernel.rs	3132	3197
+servelet-router	servelet-router/src/lib.rs	4ce2dcd	http-server/src/kernel/platform.rs	1126	1138
+servelet-router	servelet-router/src/router.rs	4ce2dcd	http-server/src/kernel.rs	2446	2815
+servelet-tls	servelet-tls/src/tls.rs	4ce2dcd	http-server/src/kernel.rs	1854	1968

@@ -1,0 +1,23 @@
+[package]
+name = "servelet-tls"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Server-side TLS termination over rustls."
+publish = false
+
+[dependencies]
+servelet-core = { path = "../servelet-core" }
+servelet-h1 = { path = "../servelet-h1" }
+servelet-router = { path = "../servelet-router" }
+# `ServerConfig` and the ring provider (TLS 1.3 only, no client auth).
+rustls.workspace = true
+# The DER types `ServerConfig::with_single_cert` takes.
+rustls-pki-types.workspace = true
+# The handshake itself.
+tokio-rustls.workspace = true
+hashtrinity.workspace = true
+tokio = { workspace = true, features = ["net", "rt", "rt-multi-thread", "macros", "io-util"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["net", "rt", "rt-multi-thread", "macros", "io-util"] }
