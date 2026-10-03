@@ -697,3 +697,39 @@ mod percent_encode_tests {
         assert_eq!(percent_encode(""), "");
     }
 }
+
+/// Whether a response/connection asks to be closed rather than kept alive — the `Connection:
+/// close` token, matched case-insensitively per RFC 9110 §7.6.1.
+///
+/// Hoisted here from the two private copies that had grown in `biota/http-server`'s
+/// `kernel.rs` and `servelet-h1`'s `wire.rs`, which are byte-identical. A client deciding
+/// whether to pool a connection and a server deciding whether to keep one are the same
+/// question, so it has one answer.
+pub fn connection_close(headers: &HeaderMap) -> bool {
+    headers
+        .get(header::CONNECTION)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.to_ascii_lowercase().contains("close"))
+        .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod connection_close_tests {
+    use super::{connection_close, header, HeaderMap};
+
+    #[test]
+    fn absent_header_is_not_close() {
+        assert!(!connection_close(&HeaderMap::new()));
+    }
+
+    #[test]
+    fn close_token_is_matched_case_insensitively() {
+        let mut h = HeaderMap::new();
+        h.insert(header::CONNECTION, "Close");
+        assert!(connection_close(&h));
+        h.insert(header::CONNECTION, "keep-alive, CLOSE");
+        assert!(connection_close(&h));
+        h.insert(header::CONNECTION, "keep-alive");
+        assert!(!connection_close(&h));
+    }
+}

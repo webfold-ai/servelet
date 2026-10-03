@@ -6,6 +6,7 @@ members = [
     "crates/servelet-h1",
     "crates/servelet-tls",
     "crates/servelet-sse",
+    "crates/servelet-client",
 ]
 
 [workspace.package]

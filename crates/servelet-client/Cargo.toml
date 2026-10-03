@@ -1,0 +1,24 @@
+[package]
+name = "servelet-client"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "HTTP client: Client/RequestBuilder, connection pool, TLS, redirects and streaming send, against servelet-core's types."
+
+[dependencies]
+servelet-core = { path = "../servelet-core" }
+hashtrinity = { workspace = true }
+tokio = { workspace = true, features = ["net", "io-util", "time", "sync"] }
+rustls = { workspace = true }
+tokio-rustls = { workspace = true }
+rustls-pki-types = { workspace = true }
+rustls-native-certs = "0.8"
+tracing = { workspace = true }
+
+[dev-dependencies]
+# The socket tests drive the client against a real servelet server, and against a
+# hand-rolled one — so they need the serving half as a dev-dep, not as a runtime dep.
+servelet-router = { path = "../servelet-router" }
+servelet-h1 = { path = "../servelet-h1" }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }

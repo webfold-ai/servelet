@@ -180,14 +180,6 @@ pub async fn serve_connection<S: AsyncRead + AsyncWrite + Unpin + Send + 'static
     let _ = reader.shutdown().await;
 }
 
-fn connection_close(headers: &HeaderMap) -> bool {
-    headers
-        .get(header::CONNECTION)
-        .and_then(|v| v.to_str().ok())
-        .map(|v| v.to_ascii_lowercase().contains("close"))
-        .unwrap_or(false)
-}
-
 pub async fn read_request(stream: &mut TcpStream) -> Result<Request> {
     let mut reader = BufReader::new(stream);
     read_request_buffered(&mut reader).await
