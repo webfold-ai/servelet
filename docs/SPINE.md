@@ -170,7 +170,16 @@ exactly what the "NOT YOURS" list would distribute across `servelet-client`, `se
 ## 5. Tests: what moved, and what could not
 
 `servelet-core` 8 · `servelet-router` 13 · `servelet-h1` 6 · `servelet-tls` 4 = **31 tests**, all
-green. Counts measured by `grep -c '#\[test\]\|#\[tokio::test'` on each `crates/*/tests/*.rs`.
+green, measured this run:
+
+```
+servelet-core    tests/moved.rs   8 passed; 0 failed
+servelet-router  tests/moved.rs  13 passed; 0 failed
+servelet-h1      tests/socket.rs  6 passed; 0 failed
+servelet-tls     tests/socket.rs  4 passed; 0 failed
+```
+
+Counts measured by `grep -c '#\[test\]\|#\[tokio::test'` on each `crates/*/tests/*.rs`.
 
 Baseline in biota at `4ce2dcd`: `kernel.rs` has **56** tests, all in one `mod tests` at line 3575
 (to 5059) — none of them inside the moved ranges themselves (`kernel.rs` 60–1064, 2446–2815,
@@ -199,10 +208,9 @@ Tests in `kernel.rs`'s test module that test **spine** code and moved, with thei
 | the 8 `client_*`, 5 `proxy_*`, 5 `load_balance_*`, `public_surface_covers_client_router_proxy_and_relationships`, `https_reaches_a_real_endpoint`, `cookie_*`, `multipart_*`, `http_date_*`, `rfc3339_*` | they test the client, proxy/pool, load-balancing, cookie and multipart code that stayed in biota. 45 of `kernel.rs`'s 56 tests are outside this unit. |
 
 **Tests added by this extraction** (not moved; the moved code had no socket-level proof of the
-split): `core_is_pure_data_and_names_no_async_runtime`, `router_public_surface_dispatches_and_reports_contains_route`
-(added after `bf34eca`: the fallback test asserted nothing about its own route, so a mutation of the
-fallback registration went unnoticed), and the five socket tests in
-`crates/servelet-h1/tests/socket.rs` and `crates/servelet-tls/tests/socket.rs`.
+split): `core_is_pure_data_and_names_no_async_runtime`, `router_public_surface_dispatches_and_reports_contains_route`, plus the five socket tests in
+`crates/servelet-h1/tests/socket.rs` and `crates/servelet-tls/tests/socket.rs`, and the second
+assertion added to `router_fallback_catches_unmatched_requests` (§5, mutation checks).
 
 ### Real-socket proof
 
@@ -228,22 +236,92 @@ explicitly rather than through the system store, so it cannot be mistaken for a 
 A green suite means nothing unless a wrong implementation makes it red. Two mutations, each shown
 failing then restored:
 
-* **A.** `servelet-router`: a route registration is renamed (`"/known"` → `"/known-MUTATED"`) in
-  `tests/moved.rs`. Caught.
-* **B.** `servelet-h1`: the auto-written `Connection: keep-alive` header in `src/wire.rs` is
-  flipped to `close`. Caught.
+```
+=== mutation A: delete a route registration in the router test ===
+mutation A applied to crates/servelet-router/tests/moved.rs
+PASS: mutation A was caught (suite went red)
+  test router_fallback_catches_unmatched_requests ... FAILED
+  test result: FAILED. 12 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-The script exits non-zero unless **both** were caught *and* the restored suite is green again.
+=== mutation B: flip a header in the h1 writer ===
+mutation B applied to crates/servelet-h1/src/wire.rs
+PASS: mutation B was caught (suite went red)
+  test keep_alive_serves_two_requests_on_one_connection ... FAILED
+  test serves_a_router_route_over_a_real_socket ... FAILED
+  test result: FAILED. 4 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+=== restored suite ===
+green again after restore
+mutations caught: 2/2
+```
+
+**Two real defects this found, both now fixed and both recorded here because a gate that has never
+been run is not a gate:**
+
+1. **The committed fallback test did not assert its own route.** `router_fallback_catches_unmatched_requests`
+   registered `/known` and then only ever requested `/unknown`, so its route table was unpinned: a
+   mutation that renamed `/known` left the suite green. It also revealed that a previous run was
+   killed **between applying mutation A and restoring it**, and the `/known-MUTATED` string was
+   captured in a supervisor snapshot and committed. The test now asserts *both* directions — that
+   `/known` still resolves, and that `/unknown` still reaches the custom fallback — because
+   otherwise it cannot tell "the fallback fired" from "the router matched nothing at all".
+2. **`mutation.sh` could not tell a caught mutation from a surviving one.** It ran
+   `cargo test … | grep -q "test result: FAILED"` under `set -o pipefail`; `grep -q` exits at the
+   first match, cargo takes a SIGPIPE on its next write, and the pipeline reports cargo's 141 rather
+   than grep's 0. Mutation B was genuinely caught — 2 tests really did go red — and the script
+   reported "SURVIVED". It now captures cargo's output to a log and decides from the test output
+   rather than from cargo's exit code, and it explicitly refuses to count a build failure as a
+   caught mutation (if the tests never ran, nothing was proven).
 
 ### The budget gate actually fails
 
-Adding a 1,300-line dummy `.rs` file under `crates/servelet-core/src/` makes `scripts/budget.sh`
-report `FILE-OVER-1200` and exit 1; removing it returns the gate to green. NOT a claim:
-`scripts/budget.sh` output is pasted in the worker report.
+Adding a 1,300-line dummy `.rs` file under `crates/servelet-core/src/` and running the gate:
+
+```
+crate	lines	budget	max_file	budget	status
+servelet-core	2518	3000	1300	1200	LINES-ROSE FILE-ROSE FILE-OVER-1200
+servelet-h1	497	3000	302	1200	ok
+servelet-router	414	3000	372	1200	ok
+servelet-tls	133	3000	116	1200	ok
+
+budget FAILED: a number rose above budget/baseline.tsv (rule 5 ratchet)
+exit=1  (expect 1)
+```
+
+Three independent signals fire: the crate's line count rose, the max-file number rose, and a file
+exceeded 1,200 outright. Removing the dummy file returns `exit=0`.
 
 ---
 
-## 6. Line counts and rule 5
+## 6. Formatting and lint: what was deliberately NOT done
+
+The harness's non-blocking steps V1/V2 are `cargo fmt --all -- --check` and
+`cargo clippy --all-targets -- -D warnings`. Both are **failing on purpose**, and neither was
+"fixed", because fixing either one means editing moved lines — which rule 9 forbids in the same
+commit as the move:
+
+* **`cargo fmt --check`** wants to re-wrap moved lines, e.g.
+  `Extensions { map: hashtrinity::Table::new() }` in `crates/servelet-core/src/extensions.rs:75`
+  into a multi-line struct literal. Running it would make `verify_move.py` report a large number of
+  `unaccounted` lines and break the byte-for-byte proof that is the entire point of this unit.
+* **`cargo clippy -D warnings`** reports exactly one lint:
+  `manual_pattern_char_comparison` at `crates/servelet-core/src/types.rs:584`
+  (`match rest.find(|c| c == '/' || c == '?')`, verbatim from `kernel.rs`). The suggested
+  `['/', '?']` rewrite is a behaviour-preserving change to a moved line, so it is left as it is.
+
+These are the honest trade-off of rule 9 and are recorded here rather than hidden. The natural home
+for both is a **separate commit after the move has landed everywhere**, titled as a formatting
+change, with `verify_move.py`'s deviation list updated in the same commit so the proof stays honest.
+
+`cargo clippy` also prints two `patch ... was not used in the crate graph` warnings for `sangdb`
+and `ruler`. Those patches live in the machine-global `~/.cargo/config.toml`, not in this
+workspace, and being *unused* is the point: it is positive evidence that the spine has no hidden
+dependency on a local path checkout. `servelet-core`'s only dependency is `hashtrinity` from the
+GitLab mirror.
+
+---
+
+## 7. Line counts and rule 5
 
 `budget/baseline.tsv` is the committed ratchet baseline. Measured:
 
@@ -259,7 +337,7 @@ known exceptions (every note is `-`). The spine split cleanly; no file needed an
 
 ---
 
-## 7. Not this unit
+## 8. Not this unit
 
 `servelet-sse`, `-ws`, `-cookie`, `-multipart`, `-static`, `-cors`, `-limits`, `-acme`,
 `-authed`, `-openapi`, and `-h2`/`-client`. They are untouched in biota at `4ce2dcd`; what to keep

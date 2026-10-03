@@ -26,9 +26,13 @@ scripts/budget.sh || { echo "GATE 2 FAILED"; rc=1; }
 echo
 echo "=== gate 3/3: dependency weight (rule 6) =============================="
 printf 'crate\tdeps\tbudget\tstatus\n'
+# Skip the header row and comments. Reading the header as data used to print a bogus
+# "crate 0 deps ok" row and a `[ 0: deps: integer expected` error into the middle of the gate
+# output -- noise in the one place whose whole job is to be read.
 while IFS=$'\t' read -r c budget; do
   [ -z "$c" ] && continue
-  case "$c" in \#*) continue ;; esac
+  case "$c" in \#*|crate) continue ;; esac
+  case "$budget" in ''|*[!0-9]*) echo "malformed row: $c $budget"; rc=1; continue ;; esac
   n=$(cargo tree -p "$c" --prefix none 2>/dev/null | sort -u | wc -l)
   if [ "$n" -gt "$budget" ]; then st="HEAVIER"; rc=1; else st=ok; fi
   printf '%s\t%s\t%s\t%s\n' "$c" "$n" "$budget" "$st"
