@@ -32,7 +32,8 @@ RANGES = {
     # kernel.rs: the SSE writer that `serve_connection` dispatched to. 3059-3065 is its doc
     # comment, which is prose about this crate; the code is 3066-3130.
     "servelet-sse/src/wire.rs": [("kernel.rs", 3059, 3130)],
-    # lib.rs `pub mod cookie` (1910-2135): the module body, 1911-2134.
+    # helpers.rs: `percent_decode` (77-111) and `percent_encode` (113-131).
+    "servelet-uri/src/lib.rs": [("helpers.rs", 77, 111), ("helpers.rs", 113, 131)],
     "servelet-cookie/src/lib.rs": [("lib.rs", 1911, 2134)],
     "servelet-core/src/error.rs": [("kernel.rs", 60, 84)],
     "servelet-core/src/types.rs": [("kernel.rs", 86, 731)],
@@ -55,6 +56,7 @@ RANGES = {
 # Lines that are never in biota verbatim because they are a *deliberate, documented*
 # deviation (see docs/SPINE.md "Deviations"). Each is an exact, whole-line match.
 KNOWN_DEVIATIONS = {
+    "servelet-uri/src/lib.rs": ["#![forbid(unsafe_code)]"],
     # `crate::` -> the crate that owns the name now, `Responder`/`impl crate::Response` became
     # an inherent method and a free function (rule 4 drops the actix trait), and the fields the
     # sibling `wire.rs` reads went from `pub(crate)` to `pub` within this crate.
@@ -209,7 +211,7 @@ def main():
     args = ap.parse_args()
 
     sources = {name: git_show(args.biota, args.rev, name)
-               for name in ("kernel.rs", "kernel/platform.rs", "lib.rs", "kernel/runtime.rs")}
+               for name in ("kernel.rs", "kernel/platform.rs", "lib.rs", "kernel/runtime.rs", "helpers.rs")}
 
     total_ok = total = 0
     failures = 0

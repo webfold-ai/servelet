@@ -5,3 +5,4 @@ servelet-h1	45
 servelet-tls	56
 servelet-cookie	1
 servelet-sse	48
+servelet-uri	1

@@ -1,0 +1,11 @@
+[package]
+name = "servelet-uri"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Percent-encoding and percent-decoding of a URL component."
+publish = false
+
+# No dependencies. Measured over the whole moved span (biota helpers.rs 77-131, rev 4ce2dcd):
+# no tokio, no rustls, no hashtrinity, no serde, no bytes -- `format!` and `String` only.
+[dependencies]

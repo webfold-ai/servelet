@@ -10,6 +10,7 @@
 #   C. servelet-cookie: emit `SameSite=Loose`, a value RFC 6265bis does not define.
 #   D. servelet-cookie: stop enforcing "Partitioned requires Secure".
 #   E. servelet-sse:    mislabel the keep-alive comment chunk on the wire.
+#   F. servelet-uri:    stop escaping the space in a URL component.
 #
 # Exit 0 only if both mutations were caught AND the restored suite is green.
 set -uo pipefail
@@ -17,7 +18,7 @@ cd "$(dirname "$0")/.."
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/home/ctown/.cache/cargo-target-servelet-spine}"
 export CARGO_INCREMENTAL=0
 
-caught=0; total=5
+caught=0; total=6
 LOG=$(mktemp)
 trap 'cp /tmp/mutation.bak "$RESTORE" 2>/dev/null || true' EXIT
 RESTORE=""
@@ -96,6 +97,12 @@ echo "=== mutation E: mislabel the SSE keep-alive chunk ==="
 run_mut "E" crates/servelet-sse/src/wire.rs \
   'write_sse_chunk(writer, ": keep-alive\n\n".to_string()).await?;' \
   'write_sse_chunk(writer, ": KA\n\n".to_string()).await?;'
+
+echo
+echo "=== mutation F: stop escaping a space in percent_encode ==="
+run_mut "F" crates/servelet-uri/src/lib.rs \
+  "b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {" \
+  "b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b' ' => {"
 
 echo
 echo "=== restored suite ==="
