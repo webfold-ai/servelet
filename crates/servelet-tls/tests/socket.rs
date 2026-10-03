@@ -9,9 +9,17 @@
 //! `server.key.pem`), generated once with:
 //!
 //! ```text
-//! openssl req -x509 -newkey rsa:2048 -nodes -days 36500 -subj "/CN=localhost" \
-//!   -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
-//!   -keyout tests/fixtures/server.key.pem -out tests/fixtures/server.cert.pem
+//! openssl genpkey -algorithm ED25519 -out tests/fixtures/server.key.pem
+//! openssl req -new -x509 -key tests/fixtures/server.key.pem -days 36500 \
+//!   -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
+//!   -addext "basicConstraints=critical,CA:FALSE" -addext "keyUsage=critical,digitalSignature" \
+//!   -addext "extendedKeyUsage=serverAuth" \
+//!   -out tests/fixtures/server.cert.pem
+//!
+//! ED25519, not RSA, because the moved PEM parser in `servelet-tls` accepts only ed25519 and
+//! ECDSA-P256 PKCS#8 keys (it says so in its own error, hashtrinity-rustls). The first fixture
+//! written here was RSA and all three handshake tests failed on exactly that; the fixture, not
+//! the moved code, was wrong.
 //! ```
 //!
 //! It is a TEST certificate for `localhost` with a PUBLICLY KNOWN private key checked into a
