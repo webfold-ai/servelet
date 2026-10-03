@@ -5,7 +5,11 @@
 //! `triggers_io_error` path string, which still contains "bedrock" because changing it would
 //! change nothing about what the test proves and the test is moved byte-for-byte.
 
-use super::*;
+// The only edit at this seam: biota's `mod tests` sat inside `kernel.rs` and read its own names
+// out of the enclosing module. As an integration test the file has to name the crate explicitly;
+// `mod moved` (kept from the original nesting) then does `use super::*` as before.
+use servelet_core::header;
+use servelet_core::*;
 
 mod moved {
     use super::*;
@@ -132,9 +136,8 @@ fn core_is_pure_data_and_names_no_async_runtime() {
     fn build_and_read_without_an_executor() -> String {
         let mut req = Request::new(Method::POST, "http://h:1/p?q=1".parse().unwrap());
         req.headers_mut().insert(header::CONTENT_TYPE, "text/plain");
-        req.with_body("hi");
         req.extensions_mut().insert(7u32);
-        let resp = Response::ok(req.into_body());
+        let resp = Response::ok(req.with_body("hi").into_body());
         String::from_utf8(resp.body.clone()).unwrap()
     }
     assert_eq!(build_and_read_without_an_executor(), "hi");
