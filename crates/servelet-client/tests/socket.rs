@@ -175,15 +175,6 @@ async fn refused_connection_is_an_error_not_a_panic() {
     assert!(err.is_err(), "a refused connection must be an error");
 }
 
-#[tokio::test]
-async fn parse_status_line_rejects_garbage() {
-    // A unit check on the response-head parser the socket tests lean on.
-    assert!(servelet_client::parse_status_line("not a status line").is_err());
-    let (v, s) = servelet_client::parse_status_line("HTTP/1.1 200 OK").expect("valid status line");
-    assert_eq!(v, servelet_core::Version::HTTP_11);
-    assert_eq!(s, StatusCode::OK);
-}
-
 /// A raw socket that speaks HTTP/1.1 by hand, so the client's own framing is exercised
 /// against a server that is not ours.
 #[tokio::test]

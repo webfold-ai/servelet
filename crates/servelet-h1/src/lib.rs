@@ -11,8 +11,17 @@
 //!   * `write_streaming_response` — lines 3143-3197
 //!
 //! CUT, with the reason, in `docs/SPINE.md` (both belong to crates this unit does not build):
-//!   * `write_sse_response`/`write_sse_chunk` (3066-3130) — `servelet-sse` owns the SSE framing.
+//!   * `write_sse_response`/`write_sse_chunk` (3066-3130) — `servelet-sse` owns the SSE framing;
+//!     it reaches this crate's writer through the `StreamFormatter` seam (`streaming.rs`), not
+//!     through a dependency edge in this direction.
 //!   * the h2c-preface sniff at the top of `serve_connection` — `servelet-h2` owns the preface.
+//!
+//! Added after the move (its own commit, its own tests; `docs/EXTENSIONS.md` §7):
+//!   * `upgrade.rs` — the upgrade seam. A handler that returns a WebSocket has to be able to
+//!     say "and then this connection is mine", and the value it needs (the stream) is the one
+//!     `serve_connection` owns. `with_upgrade(resp, callback)` stashes the callback on the
+//!     response; `serve_connection` hands the connection over instead of writing a response.
+//!     This is what makes `servelet-ws` reachable from a route at all.
 //!
 //! Public API: [`serve`], [`serve_gracefully`], [`serve_connection`], [`read_request`],
 //! [`write_response`], [`streaming`]/[`streaming_body`]/[`StreamingBody`].
@@ -30,10 +39,12 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWrite
 use tracing::Instrument;
 
 mod streaming;
+mod upgrade;
 mod wire;
 
-pub use streaming::{streaming, streaming_body, StreamingBody};
-pub use wire::{read_request, serve, serve_connection, write_response};
+pub use streaming::{streaming, streaming_body, with_formatter, StreamFormatter, StreamingBody, take_receiver};
+pub use upgrade::{with_upgrade, Connection, Upgraded, UpgradeFn};
+pub use wire::{read_request, serve, serve_connection, write_chunk, write_response};
 pub use graceful::serve_gracefully;
 
 mod graceful;

@@ -1,24 +1,38 @@
 [package]
 name = "servelet-client"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "An outbound HTTP client with a connection pool and a retry policy."
 publish = false
-description = "HTTP client: Client/RequestBuilder, connection pool, TLS, redirects and streaming send, against servelet-core's types."
 
 [dependencies]
+# The shared types: Method, Uri, HeaderMap/HeaderName/HeaderValue, StatusCode, Version, Error,
+# and the `CoordMap`/`PHI` pair the pool's index is built from.
 servelet-core = { path = "../servelet-core" }
-hashtrinity = { workspace = true }
-tokio = { workspace = true, features = ["net", "io-util", "time", "sync"] }
-rustls = { workspace = true }
-tokio-rustls = { workspace = true }
-rustls-pki-types = { workspace = true }
-rustls-native-certs = "0.8"
-tracing = { workspace = true }
+# Client TLS. OPTIONAL and OFF BY DEFAULT (rule 6: weight is a feature): the default features
+# build a client that speaks plaintext HTTP only, and `Client::https(...)` is compiled in only
+# with `tls`. A consumer that never makes an https request pays for no TLS stack at all --
+# measured with and without, both numbers are in the crate README.
+rustls = { workspace = true, optional = true }
+tokio-rustls = { workspace = true, optional = true }
+# The system trust store (`tls_config` at kernel.rs 1826-1852): "prefer OS package signatures",
+# the same discipline as everywhere else in this workspace.
+rustls-native-certs = { workspace = true, optional = true }
+# `ServerName::try_from(host)` in `connect_fresh`.
+rustls-pki-types = { workspace = true, optional = true }
+# net/io-util: the sockets, the reads and the writes. time: the retry backoff and the read
+# timeouts. sync: the pool's Mutex. rt + macros: the moved `#[tokio::test]`s and `tokio::spawn`.
+tokio = { workspace = true, features = ["net", "io-util", "time", "sync", "rt", "rt-multi-thread", "macros"] }
+hashtrinity.workspace = true
+
+[features]
+default = []
+tls = ["dep:rustls", "dep:tokio-rustls", "dep:rustls-native-certs", "dep:rustls-pki-types"]
 
 [dev-dependencies]
-# The socket tests drive the client against a real servelet server, and against a
-# hand-rolled one — so they need the serving half as a dev-dep, not as a runtime dep.
+# Real-socket tests drive the client against a live servelet server as well as a
+# hand-rolled one, so they need the serving half as a dev-dep only.
 servelet-router = { path = "../servelet-router" }
 servelet-h1 = { path = "../servelet-h1" }
-tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "io-util", "time"] }

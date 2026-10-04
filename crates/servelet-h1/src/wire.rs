@@ -153,12 +153,38 @@ pub async fn serve_connection<S: AsyncRead + AsyncWrite + Unpin + Send + 'static
             }
         };
         let keep = req.version() != Version::HTTP_10 && !connection_close(req.headers());
-        let resp = router.handle(req).await;
+        let mut resp = router.handle(req).await;
+        // An upgraded connection (a WebSocket, today): the handler stashed a callback on the
+        // response and the connection is now ITSS. The `BufReader` goes with it, unread buffer
+        // and all -- whatever the client pipelined behind the request head (a WebSocket client's
+        // first frame very often arrives in the same read) is still in there, and handing over
+        // the reader rather than the bare stream is what keeps those bytes. `return`, not
+        // `break`: past this point `reader` belongs to the callback, so the clean-shutdown at
+        // the end of this function must not touch it, and no `101` is written here either --
+        // the protocol owns its own first bytes (`servelet_ws::accept` writes the 101 itself).
+        if let Some(upgrade) = crate::upgrade::take_upgrade(&mut resp) {
+            let upgraded = crate::upgrade::Upgraded::new(Box::new(reader));
+            if let Err(e) = upgrade(upgraded).await {
+                eprintln!("DEBUG  target=bedrock::serve");  // was: DEBUG target: "bedrock::serve", error = %e, "the upgraded connection ended in an error"
+            }
+            return;
+        }
         // CUT (docs/SPINE.md "Deviations"): the SSE branch that stood here is `servelet-sse`'s
         // to reinstate. It dispatched on `Response::sse_body()`, a method whose type
         // (`crate::httpsrv::httpx::sse::SseBody`) is another crate's. The generic streaming branch
         // below is untouched: an SSE body is stashed the same way and, without its formatter,
         // still goes out as real chunked bytes.
+        // A response that carries a writer for its own body (SSE does; `servelet-sse`) is
+        // written by that writer. Erasing the concrete reader type here is what lets a writer
+        // written against any `AsyncWrite` be stored in the response and used here.
+        if let Some(formatter) = crate::streaming::take_formatter(&mut resp) {
+            let mut writer: &mut (dyn tokio::io::AsyncWrite + Unpin + Send) = &mut reader;
+            let written = (formatter)(&mut writer, resp).await;
+            if let Err(e) = written {
+                eprintln!("DEBUG  target=bedrock::serve");  // was: DEBUG target: "bedrock::serve", error = %e, "connection closed during streaming response"
+            }
+            break;
+        }
         if let Some(streaming_body) = crate::streaming_body(&resp) {
             if let Err(e) = write_streaming_response(&mut reader, resp, streaming_body).await {
                 eprintln!("DEBUG  target=bedrock::serve");  // was: DEBUG target: "bedrock::serve", error = %e, "connection closed during streaming response"
@@ -234,7 +260,7 @@ pub async fn write_response<W: AsyncWriteExt + Unpin>(
 /// One HTTP chunked-transfer-encoding frame (`{hex-len}\r\n{data}\r\n`) — shared by the SSE and
 /// generic streaming writers, the two response paths that write a body incrementally rather than
 /// all at once.
-async fn write_chunk<W: AsyncWriteExt + Unpin>(writer: &mut W, data: &[u8]) -> Result<()> {
+pub async fn write_chunk<W: AsyncWriteExt + Unpin>(writer: &mut W, data: &[u8]) -> Result<()> {
     writer.write_all(format!("{:x}\r\n", data.len()).as_bytes()).await?;
     writer.write_all(data).await?;
     writer.write_all(b"\r\n").await?;

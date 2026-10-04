@@ -13,3 +13,17 @@ servelet-h1	servelet-h1/src/wire.rs	4ce2dcd	http-server/src/kernel.rs	3132	3197
 servelet-router	servelet-router/src/lib.rs	4ce2dcd	http-server/src/kernel/platform.rs	1126	1138
 servelet-router	servelet-router/src/router.rs	4ce2dcd	http-server/src/kernel.rs	2446	2815
 servelet-tls	servelet-tls/src/tls.rs	4ce2dcd	http-server/src/kernel.rs	1854	1968
+servelet-cookie	servelet-cookie/src/lib.rs	4ce2dcd	http-server/src/lib.rs	1911	2134
+servelet-sse	crates/servelet-sse/src/sse.rs	4ce2dcd	http-server/src/lib.rs	2138	2418
+servelet-sse	crates/servelet-sse/src/builder.rs	4ce2dcd	http-server/src/lib.rs	92	222
+servelet-sse	crates/servelet-sse/src/wire.rs	4ce2dcd	http-server/src/kernel.rs	3059	3130
+servelet-uri	servelet-uri/src/lib.rs	4ce2dcd	http-server/src/helpers.rs	77	131
+servelet-client	servelet-client/src/reqwest.rs	4ce2dcd	http-server/src/kernel.rs	1065	1673
+servelet-client	servelet-client/src/stream.rs	4ce2dcd	http-server/src/kernel.rs	1674	1852
+servelet-client	servelet-client/src/pool.rs	4ce2dcd	http-server/src/kernel.rs	1970	2083
+servelet-client	servelet-client/src/send.rs	4ce2dcd	http-server/src/kernel.rs	2085	2444
+servelet-ws	crates/servelet-ws/src/handshake.rs	4ce2dcd	http-server/src/lib.rs	2490	2598
+servelet-ws	crates/servelet-ws/src/frame.rs	4ce2dcd	http-server/src/lib.rs	2600	2734
+servelet-ws	crates/servelet-ws/src/client.rs	4ce2dcd	http-server/src/lib.rs	2736	2785
+servelet-ws	crates/servelet-ws/src/lib.rs	4ce2dcd	http-server/src/lib.rs	2787	2808
+servelet-ws	crates/servelet-ws/tests/moved.rs	4ce2dcd	http-server/src/lib.rs	2814	2927

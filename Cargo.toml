@@ -1,12 +1,15 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/servelet-client",
+    "crates/servelet-cookie",
     "crates/servelet-core",
     "crates/servelet-router",
     "crates/servelet-h1",
-    "crates/servelet-tls",
     "crates/servelet-sse",
-    "crates/servelet-client",
+    "crates/servelet-tls",
+    "crates/servelet-uri",
+    "crates/servelet-ws",
 ]
 
 [workspace.package]
@@ -26,6 +29,8 @@ tokio = { version = "1", default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 rustls-pki-types = "1"
+# Client TLS, behind servelet-client's off-by-default `tls` feature (rule 6).
+rustls-native-certs = { version = "0.8", default-features = false }
 tracing = { version = "0.1", default-features = false, features = ["std", "attributes"] }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "fmt"] }
 

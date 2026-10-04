@@ -7,14 +7,24 @@
 #
 #   A. servelet-router: rename a registered route in the fallback test's fixture.
 #   B. servelet-h1:     flip the auto-written `Connection: keep-alive` header to `close`.
+#   C. servelet-cookie: emit `SameSite=Loose`, a value RFC 6265bis does not define.
+#   D. servelet-cookie: stop enforcing "Partitioned requires Secure".
+#   E. servelet-sse:    mislabel the keep-alive comment chunk on the wire.
+#   F. servelet-uri:    stop escaping the space in a URL component.
+#   G. servelet-client: cap the keepalive pool at zero, so nothing is ever reused.
+#   H. servelet-ws:    drop the WS_GUID from the accept key, so every 101 computes the wrong
+#                      Sec-WebSocket-Accept (the single value RFC 6455 makes a server prove).
+#   I. servelet-ws:    mask every outgoing client byte with mask_key[0] instead of key[i % 4].
+#   J. servelet-ws:    unmask every incoming byte with key[0] instead of key[i % 4].
+#   K. servelet-h1:    stop dispatching the upgrade at all, so no route can ever take the socket.
 #
-# Exit 0 only if both mutations were caught AND the restored suite is green.
+# Exit 0 only if every mutation was caught AND the restored suite is green.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/home/ctown/.cache/cargo-target-servelet-spine}"
 export CARGO_INCREMENTAL=0
 
-caught=0; total=2
+caught=0; total=11
 LOG=$(mktemp)
 trap 'cp /tmp/mutation.bak "$RESTORE" 2>/dev/null || true' EXIT
 RESTORE=""
@@ -75,6 +85,66 @@ echo "=== mutation B: flip a header in the h1 writer ==="
 run_mut "B" crates/servelet-h1/src/wire.rs \
   'response.headers.insert(header::CONNECTION, "keep-alive");' \
   'response.headers.insert(header::CONNECTION, "close");'
+
+echo
+echo "=== mutation C: mislabel a SameSite value in the cookie crate ==="
+run_mut "C" crates/servelet-cookie/src/lib.rs \
+  'SameSite::Lax => "Lax",' \
+  'SameSite::Lax => "Loose",'
+
+echo
+echo "=== mutation D: drop the Partitioned-requires-Secure rule ==="
+run_mut "D" crates/servelet-cookie/src/lib.rs \
+  'return Err(CookieError::RequiresSecure("Partitioned"));' \
+  'return Ok(self.encoded());'
+
+echo
+echo "=== mutation E: mislabel the SSE keep-alive chunk ==="
+run_mut "E" crates/servelet-sse/src/wire.rs \
+  'write_sse_chunk(writer, ": keep-alive\n\n".to_string()).await?;' \
+  'write_sse_chunk(writer, ": KA\n\n".to_string()).await?;'
+
+echo
+echo "=== mutation F: stop escaping a space in percent_encode ==="
+run_mut "F" crates/servelet-uri/src/lib.rs \
+  "b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {" \
+  "b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b' ' => {"
+
+echo
+echo "=== mutation G: stop reusing pooled connections (cap them at zero) ==="
+run_mut "G" crates/servelet-client/src/pool.rs \
+  'const POOL_CAP_PER_IDENTITY: usize = 32;' \
+  'const POOL_CAP_PER_IDENTITY: usize = 0;'
+
+echo
+echo "=== mutation H: compute Sec-WebSocket-Accept without the RFC 6455 GUID ==="
+# The one mutation that breaks every WebSocket connection on the planet at once, and the reason
+# the handshake test pins the RFC's own worked example rather than a round trip: a round trip
+# would pass with a self-consistent-but-wrong accept key on both sides.
+run_mut "H" crates/servelet-ws/src/handshake.rs \
+  'input.extend_from_slice(WS_GUID.as_bytes());' \
+  'input.extend_from_slice(b"");'
+
+echo
+echo "=== mutation I: mask every client byte with mask_key[0] ==="
+run_mut "I" crates/servelet-ws/src/frame.rs \
+  'frame.extend(payload.iter().enumerate().map(|(i, b)| b ^ mask_key[i % 4]));' \
+  'frame.extend(payload.iter().enumerate().map(|(_, b)| b ^ mask_key[0]));'
+
+echo
+echo "=== mutation J: unmask every inbound byte with key[0] ==="
+run_mut "J" crates/servelet-ws/src/frame.rs \
+  '*b ^= key[i % 4];' \
+  '*b ^= key[0];'
+
+echo
+echo "=== mutation K: never hand the connection to an upgrade callback ==="
+# The seam is the whole point of this unit, so it gets its own mutation: if `serve_connection`
+# stopped dispatching, every real-socket upgrade test must go red. Typed as `None::<UpgradeFn>`
+# so it COMPILES -- a mutation that fails to build has proved nothing about the tests.
+run_mut "K" crates/servelet-h1/src/wire.rs \
+  'if let Some(upgrade) = crate::upgrade::take_upgrade(&mut resp) {' \
+  'if let Some(upgrade) = None::<crate::upgrade::UpgradeFn> {'
 
 echo
 echo "=== restored suite ==="

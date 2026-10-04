@@ -1,0 +1,26 @@
+[package]
+name = "servelet-ws"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "WebSocket: the RFC 6455 frame codec and the upgrade handshake, client and server."
+publish = false
+
+[dependencies]
+# Request/Method/Error/Result and the URI parser the client half needs -- the types this crate
+# shares with every other one, nothing more.
+servelet-core = { path = "../servelet-core" }
+# The client half's socket: `Stream` (which `connect` builds) and its reclaiming line reader
+# (`into_reader`/`into_inner`), so the handshake response and the first frame can arrive in ONE
+# TCP read without losing the tail. Same reason the moved `StreamReader` was not re-implemented.
+servelet-client = { path = "../servelet-client" }
+# net: the client half's TcpStream. io-util: every frame read and write. macros + rt: the moved
+# `#[tokio::test]`s that bind real local sockets.
+tokio = { workspace = true, features = ["net", "io-util", "macros", "rt"] }
+
+[dev-dependencies]
+# The upgrade test drives the real path a consumer uses: a Router, the authed layer in front of
+# it, h1's serve_connection, a real listener. These are dev-only -- nothing in `src/` names them.
+servelet-h1 = { path = "../servelet-h1" }
+servelet-router = { path = "../servelet-router" }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "io-util", "time"] }
