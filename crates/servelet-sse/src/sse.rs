@@ -198,35 +198,42 @@ pub struct SseEvent {
 #[derive(Debug, Default)]
 pub struct SseParser {
     buffer: String,
+    /// A trailing `\r` whose pairing is not yet known. It has ALREADY been written into
+    /// `buffer` as a `\n` — optimistically, because a lone CR is a terminator and a CR-CR
+    /// blank line is an event boundary that must be findable immediately.
+    ///
+    /// CR, LF and CRLF are three spellings of ONE terminator, so the buffer is normalised to
+    /// `\n` on ingest — but a CRLF can be SPLIT ACROSS two `feed` calls, and if the `\r` were
+    /// simply kept back, a peer writing `data: a\r` and then `\ndata: b\r\n\r\n` would have its
+    /// first terminator vanish until the whole event arrived. So the CR is emitted as a
+    /// terminator now, and RETRACTED by one character if the next chunk opens with the `\n`
+    /// that makes it half of a CRLF. Optimistic, then corrected, never lost.
+    pending_cr: bool,
 }
 
 impl SseParser {
     pub fn new() -> Self {
         SseParser {
             buffer: String::new(),
+            pending_cr: false,
         }
     }
 
     /// Feed a chunk of wire bytes; returns any events completed by this chunk.
     pub fn feed(&mut self, chunk: &[u8]) -> Vec<SseEvent> {
-        self.buffer.push_str(&String::from_utf8_lossy(chunk));
+        self.absorb(chunk);
         let mut events = Vec::new();
-        loop {
-            // Event boundary: a blank line (`\n\n` or `\r\n\r\n`).
-            let boundary_len = if self.buffer.contains("\n\n") {
-                2
-            } else if self.buffer.contains("\r\n\r\n") {
-                4
-            } else {
-                break;
-            };
-            let end = self
-                .buffer
-                .find("\n\n")
-                .or_else(|| self.buffer.find("\r\n\r\n"))
-                .unwrap();
+        // HARDENING: after `absorb`, EVERY terminator in `buffer` is a `\n` — the three
+        // spellings were already collapsed on the way in. So one rule finds every boundary.
+        //
+        // The moved code scanned for `\n\n` and `\r\n\r\n` only, which meant a peer that
+        // spelled its terminators with a lone CR — `data: a\rdata: b\r\r`, one blank CR-CR
+        // line — produced NO event at all and the buffer grew until the stream ended. Which
+        // one of the three spellings a peer chose deciding what the parser sees is the
+        // attacker choosing, since the attacker picks the spelling.
+        while let Some(end) = self.buffer.find("\n\n") {
             let block = self.buffer[..end].to_string();
-            self.buffer = self.buffer[end + boundary_len..].to_string();
+            self.buffer = self.buffer[end + 2..].to_string();
             if let Some(ev) = Self::parse_block(&block) {
                 events.push(ev);
             }
@@ -234,8 +241,31 @@ impl SseParser {
         events
     }
 
+    /// Append `chunk` to the buffer with every line terminator collapsed to a single `\n`.
+    fn absorb(&mut self, chunk: &[u8]) {
+        let text = String::from_utf8_lossy(chunk);
+        if self.pending_cr {
+            self.pending_cr = false;
+            // The held-back CR is in `buffer` as a `\n`. If this chunk opens with the `\n`
+            // that completes a CRLF, the pair was ONE terminator, so retract it — otherwise a
+            // split CRLF would manufacture a blank line, and therefore an event boundary, that
+            // the peer never sent.
+            if text.starts_with('\n') {
+                self.buffer.pop();
+            }
+        }
+        self.buffer.push_str(&Self::normalise_line_endings(&text));
+        // A CR that ended this chunk is already a `\n` in the buffer; remember to retract it if
+        // the next chunk turns out to be holding its `\n`.
+        self.pending_cr = text.ends_with('\r');
+    }
+
     /// Flush any remaining partial event (no trailing blank line).
     pub fn flush(&mut self) -> Option<SseEvent> {
+        // The held-back CR, if any, was going to become a terminator anyway and a trailing
+        // terminator is trimmed below — so dropping it changes nothing observable, and it must
+        // not leak into a LATER `feed` as a terminator in the wrong place.
+        self.pending_cr = false;
         if self.buffer.trim().is_empty() {
             return None;
         }

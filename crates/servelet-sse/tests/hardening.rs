@@ -22,8 +22,13 @@
 use servelet_sse::SseParser;
 
 /// THE obviously hostile input. A lone carriage return injected into the middle of a `data`
-/// field must be a line terminator, so it splits the field — and therefore cannot hide inside
-/// the value.
+/// field must be a line terminator, so it ENDS the data line — and cannot hide inside the value.
+///
+/// The result is `"col1"`, not `"col1\ncol2"`: once the CR terminates the line, what follows is
+/// a new line whose field name is `col2` and whose value is empty. The parser is line-based, so
+/// `col2` is a field NAME, not a second piece of data. The security property this test exists
+/// for is that no `\r` survives into `event.data`; the earlier expectation of `"col1\ncol2"`
+/// encoded a wrong belief about how a colon-less line is read and was wrong.
 #[test]
 fn a_lone_carriage_return_injected_into_an_sse_field_becomes_a_line_break() {
     let mut parser = SseParser::new();
@@ -31,8 +36,8 @@ fn a_lone_carriage_return_injected_into_an_sse_field_becomes_a_line_break() {
 
     assert_eq!(events.len(), 1, "it is still ONE event: the CR is a line break, not an event break");
     assert_eq!(
-        events[0].data, "col1\ncol2",
-        "the lone CR must become an LF, exactly as if the peer had sent one"
+        events[0].data, "col1",
+        "the CR terminates the data line; `col2` is the next line's field NAME, not more data"
     );
     assert!(
         !events[0].data.contains('\r'),
@@ -125,11 +130,18 @@ fn a_stream_of_pure_terminators_and_field_names_does_not_blow_up() {
     assert!(parser.feed(&b"\r".repeat(200_000)).is_empty());
 
     let mut parser = SseParser::new();
-    let names = b"data: x\r".repeat(100_000);
+    let mut names = b"data: x\r".repeat(100_000);
+    // The blank line the stream NEEDS to terminate the event. The earlier version of this test
+    // asserted one event from a stream that never sent one, which contradicts every other
+    // event-stream rule here: without a blank line there is no event boundary, and the parser
+    // correctly holds the partial event for the next chunk.
+    names.extend_from_slice(b"\r\r");
     let events = parser.feed(&names);
-    // 100k data lines with no blank line between them: ONE event, joined with newlines.
-    assert_eq!(events.len(), 1, "no blank line means no event boundary");
-    assert_eq!(events[0].data.len(), 200_000, "100k lines of `x` joined by 100k newlines");
+    assert_eq!(events.len(), 1, "the blank line is the event boundary");
+    // 100k lines of `x` joined by the 99_999 newlines BETWEEN them — the join count is
+    // lines-1, which the earlier version got wrong by one.
+    assert_eq!(events[0].data.len(), 199_999, "100k lines of `x` joined by 99_999 newlines");
+    assert!(parser.feed(b"").is_empty(), "and nothing is left over");
 }
 
 /// A field value carrying a NUL, and one carrying bytes that are not valid UTF-8. The parser is
@@ -146,28 +158,28 @@ fn a_field_with_a_nul_or_invalid_utf8_is_handled_lossily_not_fatal() {
     assert_eq!(events[0].data, "a\u{FFFD}b", "invalid UTF-8 becomes the replacement character");
 }
 
-/// KNOWN GAP, pinned rather than left implicit: a peer that uses ONLY lone CR as its line
-/// terminator produces no `\n\n`, so `feed` never finds an event boundary and the internal
-/// buffer keeps growing until the stream ends. This test records that behaviour honestly. The
-/// bound is the caller's read size, not this parser — see `docs/HARDENING.md`.
+/// A CR-only stream is TERMINATED, not left dangling. This used to be pinned as a "KNOWN GAP"
+/// — a peer that spells every terminator with a lone CR produced no `\n\n`, so `feed` never
+/// found a boundary and the buffer grew until the stream ended. That gap is closed: `absorb`
+/// collapses all three spellings to `\n` on the way in, so all three find a boundary.
 #[test]
-fn a_lone_cr_only_stream_finds_no_event_boundary_until_an_lf_pair_arrives() {
-    let mut parser = SsEProbe::new();
-    parser.parser.feed(b"data: a\rdata: b\r");
-    assert!(
-        parser.parser.feed(b"\n\n").len() == 1,
-        "the LF pair finally terminates the event"
-    );
-    assert_eq!(parser.parser.flush().map(|e| e.data), None);
+fn a_lone_cr_only_stream_still_finds_an_event_boundary() {
+    let mut parser = SseParser::new();
+    let events = parser.feed(b"data: a\rdata: b\r\r");
+    assert_eq!(events.len(), 1, "a CR-CR blank line is a boundary like any other");
+    assert_eq!(events[0].data, "a\nb");
 }
 
-/// Small wrapper so the gap test above reads as a probe rather than a bare call.
-struct SsEProbe {
-    parser: SseParser,
-}
-
-impl SsEProbe {
-    fn new() -> Self {
-        SsEProbe { parser: SseParser::new() }
-    }
+/// A CRLF split across two `feed` calls is still ONE terminator. This is the case the held-back
+/// trailing CR exists for: committing a `\r` at the end of a chunk would turn the `\n` at the
+/// start of the next chunk into a second terminator, manufacturing a blank line — and therefore
+/// an event boundary — that the peer never sent.
+#[test]
+fn a_carriage_return_split_across_two_feeds_is_still_one_terminator() {
+    let mut parser = SseParser::new();
+    let events = parser.feed(b"data: a\r");
+    assert!(events.is_empty(), "a half-written CRLF is not an event boundary");
+    let events = parser.feed(b"\ndata: b\r\n\r\n");
+    assert_eq!(events.len(), 1, "the split CRLF must not manufacture a second event");
+    assert_eq!(events[0].data, "a\nb");
 }
