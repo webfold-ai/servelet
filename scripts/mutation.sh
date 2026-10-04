@@ -29,7 +29,7 @@ cd "$(dirname "$0")/.."
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/home/ctown/.cache/cargo-target-servelet-spine}"
 export CARGO_INCREMENTAL=0
 
-caught=0; total=23
+caught=0; total=24
 LOG=$(mktemp)
 trap 'cp /tmp/mutation.bak "$RESTORE" 2>/dev/null || true' EXIT
 RESTORE=""
@@ -216,7 +216,7 @@ echo
 echo "=== mutation V: silently take the last of two differing Content-Lengths ==="
 run_mut "V" crates/servelet-h1/src/wire.rs \
   '(Some(previous), Some(this)) if previous != this => {' \
-  '(_previous, _this) => {}'
+  '(Some(previous), Some(this)) if previous != this && false => {'
 
 echo
 echo "=== mutation W: accept a bare LF in the header block ==="

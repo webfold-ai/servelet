@@ -536,3 +536,38 @@ async fn a_refusal_sets_connection_close_and_a_content_length() {
         "the refusal must state its own body length: {text}"
     );
 }
+// ── The request-line ceiling, pinned on its own ──────────────────────────────────────────────
+
+/// A request line of about 9 KiB is over the 8 KiB request-line ceiling and far under the 64 KiB
+/// header-block ceiling, so NO OTHER limit can refuse it: only the request-line bound does. This is
+/// the test that makes "stop bounding the request line" (mutation P) observable: with the bound
+/// gone the path is read in full, routed, and answered 404, not refused.
+#[tokio::test]
+async fn a_request_line_over_the_request_line_ceiling_is_refused_with_the_limit_named() {
+    let addr = spawn_default().await;
+    let path = "a".repeat(RequestLimits::DEFAULT_MAX_REQUEST_LINE_BYTES + 1024);
+    let request = format!("GET /{path} HTTP/1.1\r\nHost: x\r\n\r\n").into_bytes();
+
+    let reply = exchange(addr, &request).await;
+    assert_refused(&reply);
+    let text = String::from_utf8_lossy(&reply);
+    assert!(
+        text.contains(&RequestLimits::DEFAULT_MAX_REQUEST_LINE_BYTES.to_string()),
+        "the refusal must name the ceiling that was exceeded: {text}"
+    );
+}
+
+/// The control for the test above: a request line comfortably UNDER the ceiling is not refused as
+/// too long (it is a 404 because the fixture has no such route), so the ceiling is a ceiling and
+/// not a ban on long paths.
+#[tokio::test]
+async fn a_request_line_under_the_request_line_ceiling_is_not_refused_as_too_long() {
+    let addr = spawn_default().await;
+    let path = "a".repeat(RequestLimits::DEFAULT_MAX_REQUEST_LINE_BYTES - 64);
+    let request = format!("GET /{path} HTTP/1.1\r\nHost: x\r\n\r\n").into_bytes();
+
+    let reply = exchange(addr, &request).await;
+    let line = status_line(&reply);
+    assert!(!line.contains("400"), "a request line under the ceiling must not be a 400: {line:?}");
+    assert!(!line.is_empty(), "the server must answer a request line under the ceiling");
+}
