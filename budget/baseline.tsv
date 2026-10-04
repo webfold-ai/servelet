@@ -2,9 +2,9 @@ crate	lines	max_file	note
 servelet-client	1385	636	-
 servelet-cookie	298	298	-
 servelet-core	1218	648	-
-servelet-h1	703	328	raised by the upgrade seam: src/upgrade.rs (123) + 15 dispatch lines in wire.rs + 9 in lib.rs; see docs/EXTENSIONS.md section 7
+servelet-h1	989	523	raised by the upgrade seam: src/upgrade.rs (123) + 15 dispatch lines in wire.rs + 9 in lib.rs; see docs/EXTENSIONS.md section 7. Raised again by the hardening unit, which had not recorded its own lines: src/limits.rs (86, the five RequestLimits ceilings), the bounded read_line_limited replacing read_until, the checked Content-Length/chunked-size allocations, and the CRLF-only header framing in wire.rs.
 servelet-router	414	372	-
-servelet-sse	538	278	-
+servelet-sse	595	335	raised by the hardening unit: SseParser::absorb collapses CR, LF and CRLF to \n on the way in, so a peer spelling its terminators with a lone CR finds an event boundary, and a CRLF split across two feed() calls is still one terminator.
 servelet-tls	133	116	-
 servelet-uri	76	76	-
-servelet-ws	677	325	raised again by the hardening unit, same commit: the fragmentation state machine (msg_buf/msg_opcode/msg_active), the control-frame FIN/125 refusal, the total-message cap in reassembly, and the assembled-message UTF-8 check with close 1007; docs/HARDENING.md
+servelet-ws	794	437	raised again by the hardening unit, same commit: the fragmentation state machine (msg_buf/msg_opcode/msg_active), the control-frame FIN/125 refusal, the total-message cap in reassembly, and the assembled-message UTF-8 check with close 1007; docs/HARDENING.md. Raised once more by the same unit, which had not recorded src/limits.rs (80, the frame and message ceilings) or the idle/ping fix: read_n's deadline now runs on PROGRESS through fill_pending, so a cancelled read can no longer drop the bytes it already consumed off the socket.
