@@ -287,7 +287,7 @@ KNOWN_DEVIATIONS = {
     # `crate::httpsrv::actix::StreamingBody` -> this crate's own `crate::StreamingBody`.
     "servelet-h1/src/wire.rs": [
         "        let mut resp = router.handle(req).await;",
-        # The upgrade seam (docs/EXTENSIONS.md §6): six lines of dispatch between the handler
+        # The upgrade seam (docs/EXTENSIONS.md §7): six lines of dispatch between the handler
         # and the response writers. `return` rather than `break` so the clean-shutdown below
         # does not run on a connection the callback now owns.
         "        if let Some(upgrade) = crate::upgrade::take_upgrade(&mut resp) {",

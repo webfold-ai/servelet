@@ -78,7 +78,7 @@ Nine crates extracted from `biota/http-server` rev `4ce2dcd`, all byte-for-byte,
 | `servelet-sse` | 538 | 48 | 9 moved + 4 socket |
 | `servelet-uri` | 76 | **1** | 2 moved |
 | `servelet-client` | 1385 | **36** (47 with `tls`) | 12 moved + 2 TLS-feature |
-| `servelet-ws` | 386 | **38** | 5 moved |
+| `servelet-ws` | 386 | **38** runtime, 48 with the test-only edge | 5 moved + 6 real-socket upgrade |
 
 `scripts/gates.sh` runs the suite, the rule-5 line ratchet and the rule-6 dependency weight;
 `scripts/mutation.sh` flips seven behaviours and requires each to turn the suite red (7/7);

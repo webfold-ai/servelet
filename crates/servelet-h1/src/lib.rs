@@ -16,7 +16,7 @@
 //!     through a dependency edge in this direction.
 //!   * the h2c-preface sniff at the top of `serve_connection` — `servelet-h2` owns the preface.
 //!
-//! Added after the move (its own commit, its own tests; `docs/EXTENSIONS.md` §6):
+//! Added after the move (its own commit, its own tests; `docs/EXTENSIONS.md` §7):
 //!   * `upgrade.rs` — the upgrade seam. A handler that returns a WebSocket has to be able to
 //!     say "and then this connection is mine", and the value it needs (the stream) is the one
 //!     `serve_connection` owns. `with_upgrade(resp, callback)` stashes the callback on the

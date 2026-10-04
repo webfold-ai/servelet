@@ -196,3 +196,82 @@ bedrock-era callers), `servelet-ws` (93), `servelet-openapi` (22), `servelet-acm
 heaviest dependency set of any candidate — rule 6 says it must sit behind an off-by-default
 feature), and the nexus-resident layers `servelet-limits`, `servelet-cors`, `servelet-static`,
 `servelet-authed`.
+## 7. The upgrade seam (`servelet-h1` ⇄ `servelet-ws`)
+
+**Commits:** `feat(ws): servelet-ws…` and the upgrade seam added after it.
+
+### The gap it closes
+
+`biota/http-server` had `websocket::accept` and no way to reach it from a handler. `serve_connection`
+reads a request, hands the **parsed `Request`** to the `Router`, writes a response and moves on — so
+the `TcpStream` never leaves the function that owns it. A handler could compute a `101`, but the
+socket stayed behind, and there is no WebSocket without the socket. The proof that this blocks
+real work is `nexus/docs/runs.md` §8.1 on branch `yokoszn/nexus-runs`: cezar's two realtime topics
+(health, host) and the kaneo board sockets — 2 of the 17 slice-1 routes — cannot be served.
+
+### Why a response extension and not a Layer
+
+A `Layer` sees `(Request, Response)` and never the stream, so a Layer structurally cannot do this:
+the value the protocol needs is the connection itself, and a Layer is never handed it. The seam is
+therefore a **value in the response's own `Extensions`** — the same shape as the formatter seam
+(§4), so there is no second mechanism to learn and no global to install.
+
+```rust
+// 1. the handler decides whether this is an upgrade at all, and says no if it is not
+fn ws_echo(req: Request) -> Response {
+    if !req.headers().contains_key("sec-websocket-key") {
+        return Response::new(StatusCode::BAD_REQUEST, "not an upgrade");  // 400, never upgraded
+    }
+    let req = Arc::new(req);            // `accept` reads Sec-WebSocket-Key out of the Request
+    with_upgrade(Response::new(StatusCode::OK, Vec::new()), Arc::new(move |conn: Upgraded| {
+        let req = req.clone();           // the callback is `Fn`: clone per call, before `async move`
+        Box::pin(async move {
+            let mut ws = accept(conn, &req, Vec::new()).await?;   // writes the 101 itself
+            while let Ok(Message::Text(t)) = ws.recv().await {
+                ws.send_text(t).await?;
+            }
+            Ok(())
+        })
+    }))
+}
+```
+
+Three properties this buys, each of which a test pins:
+
+- **A refusal stays a refusal.** A handler that does not upgrade returns an ordinary response and
+  nothing in this path runs. `serve_connection` cannot upgrade a connection nobody asked to upgrade.
+- **The `101` is the protocol's, not the writer's.** `with_upgrade` sets no status and no headers:
+  `servelet_ws::accept` writes `101 Switching Protocols`, `Upgrade`, `Connection` and
+  `Sec-WebSocket-Accept` itself, byte-for-byte from biota. The HTTP response writer, which knows
+  nothing about switching protocols, stays out of the upgrade path entirely.
+- **Pipelined bytes survive the handover.** The callback receives the `BufReader`, unread buffer and
+  all — not the bare stream. A WebSocket client routinely puts its first frame in the same TCP
+  read as the handshake; handing over the reader is what keeps those bytes out of a corrupt first
+  `recv()`. (`servelet-ws`'s `WebSocket.pending` is the same problem one layer up, for the
+  handshake's own reader.)
+
+`serve_connection` uses `return`, not `break`, at the handover: past that point the reader belongs
+to the callback, so the loop's clean-shutdown must not touch it and nothing more is written.
+
+### Authorization is not optional, and it is not the seam's job
+
+The seam gives a handler the power to take the socket, so something in front of the handler has to
+be able to refuse — which is the auth layer's job, not this crate's, and it must run *before* the
+handler returns an upgrade at all. `crates/servelet-ws/tests/upgrade.rs` puts a role-checked
+`Layer` over the whole `Router` and asserts, over real sockets: no credentials → `401`, wrong role
+→ `403`, missing `Sec-WebSocket-Key` → `400`, wrong `Origin` → `400`, and in every refusal case no
+`101` appears on the wire.
+
+One fact that shapes any real deployment is recorded there rather than worked around: **a browser's
+WebSocket API cannot set a header on the handshake** (RFC 6455 §10.4). A real auth layer must also
+accept the credential in a cookie or the query string; the test's layer reads `?token=` for exactly
+that reason, and compares it in constant time.
+
+### The cost, measured
+
+`servelet-ws`'s **runtime** dependency count is unchanged at **38**. Its `cargo tree` figure is
+**48** because `tests/upgrade.rs` drives the path a consumer actually uses — a `Router`, the auth
+layer, `serve_connection`, a real listener — and those are dev-dependencies. `budget/deps.tsv` is
+raised to 48 to match, and `scripts/mutation.sh` mutation **K** stops `serve_connection`
+dispatching the upgrade at all and shows the real-socket tests going red, so the seam is pinned by
+behaviour rather than by its own documentation.

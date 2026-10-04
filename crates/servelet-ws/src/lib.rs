@@ -8,7 +8,7 @@
 //!
 //! The seam with the wire is one value in the response's extensions:
 //! `servelet_h1::with_upgrade(resp, callback)` -> the callback receives the connection after the
-//! `101` and drives it with this crate. See `docs/EXTENSIONS.md` §6.
+//! `101` and drives it with this crate. See `docs/EXTENSIONS.md` §7.
 //!
 //! Moved byte-for-byte from `biota/http-server`'s `lib.rs` at rev `4ce2dcd`, the `pub mod
 //! websocket` body:

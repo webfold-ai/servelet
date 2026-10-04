@@ -2,7 +2,7 @@ crate	lines	max_file	note
 servelet-client	1385	636	-
 servelet-cookie	298	298	-
 servelet-core	1218	648	-
-servelet-h1	556	313	-
+servelet-h1	703	328	raised by the upgrade seam: src/upgrade.rs (123) + 15 dispatch lines in wire.rs + 9 in lib.rs; see docs/EXTENSIONS.md section 7
 servelet-router	414	372	-
 servelet-sse	538	278	-
 servelet-tls	133	116	-

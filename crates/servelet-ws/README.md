@@ -13,7 +13,7 @@ connection over after the `101`, and stops touching it.
 parsed `Request` — the `TcpStream` never reached a handler, so nothing routed could upgrade. The
 proof is `nexus/docs/runs.md` §8.1 on branch `yokoszn/nexus-runs`: cezar's two realtime topics
 (health, host) and the kaneo board sockets (2 of the 17 slice-1 routes) are unservable without it.
-This crate plus `servelet-h1`'s upgrade seam (`docs/EXTENSIONS.md` §6) is that fix.
+This crate plus `servelet-h1`'s upgrade seam (`docs/EXTENSIONS.md` §7) is that fix.
 
 ## What is in it
 

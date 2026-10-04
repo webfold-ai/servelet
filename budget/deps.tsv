@@ -7,4 +7,8 @@ servelet-cookie	1
 servelet-sse	48
 servelet-uri	1
 servelet-client	36
-servelet-ws	38
+# 38 of servelet-ws's 48 are RUNTIME deps. The other 10 are the dev-dependencies
+# tests/upgrade.rs needs to drive the real path -- servelet-h1, servelet-router, tokio's
+# rt-multi-thread/time -- so the upgrade is tested through a real socket and a real auth layer
+# instead of a stub. Nothing in servelet-ws/src/ names any of them. docs/EXTENSIONS.md section 7.
+servelet-ws	48
