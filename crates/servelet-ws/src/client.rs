@@ -6,11 +6,22 @@ use servelet_core::{Error, Result};
 
 use crate::frame::WebSocket;
 use crate::handshake::{compute_accept_key, generate_key};
+use crate::limits::WsLimits;
 
 /// Client side: perform the HTTP Upgrade handshake against `ws://host:port/path` (or
 /// `wss://` is NOT supported here — TLS-wrapped WebSocket is a stated reduction, plain `ws://`
 /// only) and return an established `WebSocket`.
 pub async fn connect(url: &str) -> Result<WebSocket<TcpStream>> {
+    connect_with_limits(url, WsLimits::default()).await
+}
+
+/// [`connect`] with the inbound size ceilings stated by the caller.
+///
+/// The client half needs this for the same reason the server does, from the other side: this
+/// crate's `recv` is what parses whatever the SERVER sends, so a hostile or compromised server
+/// gets to name a payload length here too. A client that only ever talks to a server it trusts
+/// does not need it, which is why `connect` keeps the moved signature and defaults.
+pub async fn connect_with_limits(url: &str, limits: WsLimits) -> Result<WebSocket<TcpStream>> {
     let uri = servelet_core::parse_uri(&url.replacen("ws://", "http://", 1))?;
     let (host, port) = servelet_core::host_port(&uri)?;
     let mut stream = servelet_client::Stream::Plain(TcpStream::connect(format!("{host}:{port}")).await.map_err(Error::Io)?);
@@ -57,7 +68,7 @@ pub async fn connect(url: &str) -> Result<WebSocket<TcpStream>> {
         unreachable!("connect() only ever builds a Plain stream")
     };
     match accept {
-        Some(a) if a == expected => Ok(WebSocket { stream, is_client: true, pending }),
+        Some(a) if a == expected => Ok(WebSocket { stream, is_client: true, pending, limits }),
         Some(a) => Err(Error::Http(format!("Sec-WebSocket-Accept mismatch: got {a}, expected {expected}"))),
         None => Err(Error::Http("server response missing Sec-WebSocket-Accept".to_string())),
     }

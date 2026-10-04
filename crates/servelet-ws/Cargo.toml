@@ -23,4 +23,4 @@ tokio = { workspace = true, features = ["net", "io-util", "macros", "rt"] }
 # it, h1's serve_connection, a real listener. These are dev-only -- nothing in `src/` names them.
 servelet-h1 = { path = "../servelet-h1" }
 servelet-router = { path = "../servelet-router" }
-tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "io-util", "time"] }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "io-util", "time", "sync"] }

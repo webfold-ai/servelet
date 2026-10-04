@@ -2,6 +2,8 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use servelet_core::{Error, Result};
 
+use crate::limits::{WsLimits, CLOSE_TOO_BIG};
+
 /// A decoded WebSocket message.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Message {
@@ -33,9 +35,27 @@ pub struct WebSocket<S> {
     /// Drained before any fresh socket read (`read_n`), same pattern as `lib.rs`'s own
     /// `StreamReader`/pooled-connection leftover handling.
     pub(crate) pending: Vec<u8>,
+    /// The inbound size ceilings for this connection. Not a constant: an application that
+    /// legitimately carries video frames raises them per connection, and one that cannot be
+    /// raised is a limit that gets disabled somewhere less visible. Checked on the DECLARED
+    /// length, before the payload is read — see `limits.rs` for why that ordering is the whole
+    /// point.
+    pub(crate) limits: WsLimits,
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> WebSocket<S> {
+    /// Set the inbound size ceilings for this connection. The default is
+    /// [`WsLimits::default`]; this is how an application that needs a different ceiling says so.
+    pub fn with_limits(mut self, limits: WsLimits) -> Self {
+        self.limits = limits;
+        self
+    }
+
+    /// This connection's current size ceilings.
+    pub fn limits(&self) -> &WsLimits {
+        &self.limits
+    }
+
     /// Read exactly `n` bytes — from `pending` first, then the socket for the rest.
     async fn read_n(&mut self, n: usize) -> Result<Vec<u8>> {
         let mut out = vec![0u8; n];
@@ -94,6 +114,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin> WebSocket<S> {
         self.write_frame(OP_CLOSE, &[]).await
     }
 
+    /// Send a Close frame carrying an RFC 6455 §7.4.1 status code.
+    ///
+    /// Used by the refusals in [`Self::recv`]: a peer that is told *why* it was disconnected can
+    /// report it, and a peer that just sees the socket die retries forever. Best effort — a peer
+    /// that has already vanished must not turn a protocol refusal into a different error, so the
+    /// write result is deliberately discarded here and the caller returns its own error.
+    async fn close_with_code(&mut self, code: u16) {
+        let _ = self.write_frame(OP_CLOSE, &code.to_be_bytes()).await;
+    }
+
     /// Read one frame and decode it into a `Message`. Automatically answers a peer `Ping` with a
     /// `Pong` (RFC 6455 §5.5.2 requires this) before returning it to the caller as `Message::Ping`.
     pub async fn recv(&mut self) -> Result<Message> {
@@ -108,6 +138,20 @@ impl<S: AsyncRead + AsyncWrite + Unpin> WebSocket<S> {
         } else if len == 127 {
             let ext = self.read_n(8).await?;
             len = u64::from_be_bytes(ext.try_into().unwrap());
+        }
+
+        // HARDENING: the declared length is checked HERE, before the mask key and before any
+        // payload byte is read, and before `read_n` can reach the `vec![0u8; n]` that this value
+        // used to go straight into. The moved code had no such check, so a ten-byte frame header
+        // claiming 2^63 bytes asked the process to allocate an exabyte — an abort on Linux, not
+        // an `Err`, and therefore not something a caller could survive. The two arms are one
+        // condition: on a 32-bit target `len` can also exceed `usize`, which would truncate.
+        if len > self.limits.max_frame_bytes || len > usize::MAX as u64 {
+            self.close_with_code(CLOSE_TOO_BIG).await;
+            return Err(Error::Http(format!(
+                "inbound frame declares {len} bytes, which exceeds this connection's {} byte frame limit",
+                self.limits.max_frame_bytes
+            )));
         }
 
         let mask_key = if masked {

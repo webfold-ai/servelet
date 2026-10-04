@@ -27,10 +27,12 @@
 mod client;
 mod frame;
 mod handshake;
+mod limits;
 
-pub use client::connect;
+pub use client::{connect, connect_with_limits};
 pub use frame::{Message, WebSocket};
 pub use handshake::{base64_encode, compute_accept_key, generate_key, sha1};
+pub use limits::{WsLimits, CLOSE_INVALID_PAYLOAD, CLOSE_PROTOCOL_ERROR, CLOSE_TOO_BIG};
 
 use servelet_core::{Error, Method, Request, Result};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};/// Server side: given a raw `TcpStream`, the already-parsed upgrade `Request` (the caller's own
@@ -39,9 +41,24 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};/// Server side: given a r
 /// read the request byte-exactly), write the `101 Switching Protocols` response and return an
 /// established `WebSocket`.
 pub async fn accept<S: AsyncRead + AsyncWrite + Unpin>(
+    stream: S,
+    req: &Request,
+    pending: Vec<u8>,
+) -> Result<WebSocket<S>> {
+    accept_with_limits(stream, req, pending, WsLimits::default()).await
+}
+
+/// [`accept`] with the inbound size ceilings stated by the caller instead of defaulted.
+///
+/// A server is the side that faces the internet, so this is the call that matters: `accept`
+/// (the moved signature, unchanged) hands the connection the documented 1 MiB frame / 16 MiB
+/// message ceilings, and this one lets an application that legitimately needs different numbers
+/// say so per route rather than by editing a constant.
+pub async fn accept_with_limits<S: AsyncRead + AsyncWrite + Unpin>(
     mut stream: S,
     req: &Request,
     pending: Vec<u8>,
+    limits: WsLimits,
 ) -> Result<WebSocket<S>> {
     if req.method() != &Method::GET {
         return Err(Error::Http("WebSocket upgrade must be a GET".to_string()));
@@ -57,7 +74,7 @@ pub async fn accept<S: AsyncRead + AsyncWrite + Unpin>(
         "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept_key}\r\n\r\n"
     );
     stream.write_all(response.as_bytes()).await.map_err(Error::Io)?;
-    Ok(WebSocket { stream, is_client: false, pending })
+    Ok(WebSocket { stream, is_client: false, pending, limits })
 }
 
 /// splitmix64 — the crate's non-cryptographic clock-seeded randomness, verbatim from
