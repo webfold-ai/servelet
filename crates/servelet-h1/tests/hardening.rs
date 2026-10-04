@@ -30,6 +30,11 @@ fn app() -> Router {
         .get("/echo", |req: Request| async move {
             Response::ok(String::from_utf8_lossy(req.body()).to_string())
         })
+        // The body tests POST. Without this the router 404s them and the test measures the
+        // router instead of the body path.
+        .post("/echo", |req: Request| async move {
+            Response::ok(String::from_utf8_lossy(req.body()).to_string())
+        })
 }
 
 /// Bind an ephemeral port and serve with the DEFAULT ceilings — which is what every consumer
@@ -511,10 +516,15 @@ async fn the_refusal_names_the_rule_without_echoing_the_payload() {
 
 /// A request the server cannot parse gets a `400` and a `Connection: close`, never a silently
 /// dropped socket — a client has to be able to tell "refused" from "the network ate it".
+///
+/// The request line is genuinely unparseable (ONE token, no URI, no version). The earlier
+/// version of this test sent `NOT EVEN HTTP`, which IS parseable — three tokens, so it reaches
+/// the router and correctly 404s. A 404 there is the right answer, and asserting `400` for it
+/// was measuring the wrong thing.
 #[tokio::test]
 async fn a_refusal_sets_connection_close_and_a_content_length() {
     let addr = spawn_default().await;
-    let reply = exchange(addr, b"NOT EVEN HTTP\r\n\r\n").await;
+    let reply = exchange(addr, b"GARBAGE\r\n\r\n").await;
     assert_refused(&reply);
     let text = String::from_utf8_lossy(&reply);
     assert!(
