@@ -42,8 +42,7 @@ const CLOSE_FIN: u8 = 0x88;
 async fn close_code(ws: &mut RawWs) -> u16 {
     let (fin_opcode, payload) = timeout(Duration::from_secs(5), ws.read_frame())
         .await
-        .expect("the server must answer with a Close rather than hang")
-        ;
+        .expect("the server must answer with a Close rather than hang");
     assert_eq!(fin_opcode & 0x0F, 0x8, "expected a Close frame, got opcode {fin_opcode:#x}");
     assert!(payload.len() >= 2, "a Close carrying a code has at least two payload bytes");
     u16::from_be_bytes([payload[0], payload[1]])
@@ -149,8 +148,10 @@ async fn a_peer_that_sends_endless_continuations_is_stopped_at_the_cap() {
     let mut ws = RawWs::connect(addr).await;
 
     ws.send_frame(BINARY_START, b"x").await;
-    // 100 two-byte continuations, none of them final.
-    for _ in 0..100 {
+    // 2000 two-byte continuations, none of them final: 4001 bytes, past the 2000-byte cap.
+    // Every individual frame is 2 bytes, so neither the frame ceiling nor any per-frame rule
+    // can catch this -- only a total-message cap can, which is the whole point of it.
+    for _ in 0..2000 {
         ws.send_frame(0x00, b"yy").await;
     }
 
