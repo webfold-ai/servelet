@@ -38,13 +38,18 @@ use servelet_router::Router;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tracing::Instrument;
 
+mod limits;
 mod streaming;
 mod upgrade;
 mod wire;
 
 pub use streaming::{streaming, streaming_body, with_formatter, StreamFormatter, StreamingBody, take_receiver};
 pub use upgrade::{with_upgrade, Connection, Upgraded, UpgradeFn};
-pub use wire::{read_request, serve, serve_connection, write_chunk, write_response};
+pub use limits::RequestLimits;
+pub use wire::{
+    read_request, read_request_with_limits, serve, serve_connection, serve_connection_with_limits, write_chunk,
+    write_response,
+};
 pub use graceful::serve_gracefully;
 
 mod graceful;

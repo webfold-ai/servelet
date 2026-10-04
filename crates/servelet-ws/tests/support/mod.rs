@@ -35,6 +35,16 @@ pub const KEY: &str = "dGhlIHNhbXBsZSBub25jZQ==";
 /// The server drives `recv` in a loop until it errors, which is what a real route does, and
 /// reports every `Message` it decoded along the way.
 pub async fn spawn_ws_server(limits: WsLimits) -> (SocketAddr, tokio::sync::mpsc::UnboundedReceiver<String>) {
+    spawn_ws_server_timed(limits, None, None).await
+}
+
+/// As `spawn_ws_server`, but the connection also carries an idle timeout and a ping interval --
+/// the two deadlines `WebSocket::with_idle_timeout` / `with_ping_interval` set.
+pub async fn spawn_ws_server_timed(
+    limits: WsLimits,
+    idle_timeout: Option<Duration>,
+    ping_interval: Option<Duration>,
+) -> (SocketAddr, tokio::sync::mpsc::UnboundedReceiver<String>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
@@ -48,7 +58,15 @@ pub async fn spawn_ws_server(limits: WsLimits) -> (SocketAddr, tokio::sync::mpsc
             }
         };
         let mut ws = match accept_with_limits(stream, &req, Vec::new(), limits).await {
-            Ok(ws) => ws,
+            Ok(mut ws) => {
+                if let Some(t) = idle_timeout {
+                    ws = ws.with_idle_timeout(t);
+                }
+                if let Some(p) = ping_interval {
+                    ws = ws.with_ping_interval(p);
+                }
+                ws
+            }
             Err(e) => {
                 let _ = tx.send(format!("error accept failed: {e}"));
                 return;

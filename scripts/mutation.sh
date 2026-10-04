@@ -18,13 +18,18 @@
 #   J. servelet-ws:    unmask every incoming byte with key[0] instead of key[i % 4].
 #   K. servelet-h1:    stop dispatching the upgrade at all, so no route can ever take the socket.
 #
+# The hardening unit added L-X, one per LIMIT it introduced, because a limit nothing pins is a
+# limit that gets deleted in the next refactor. Each is the smallest possible edit that stops the
+# ceiling being enforced -- never a compile error, since a mutation that cannot build has proved
+# nothing.
+#
 # Exit 0 only if every mutation was caught AND the restored suite is green.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/home/ctown/.cache/cargo-target-servelet-spine}"
 export CARGO_INCREMENTAL=0
 
-caught=0; total=11
+caught=0; total=23
 LOG=$(mktemp)
 trap 'cp /tmp/mutation.bak "$RESTORE" 2>/dev/null || true' EXIT
 RESTORE=""
@@ -145,6 +150,87 @@ echo "=== mutation K: never hand the connection to an upgrade callback ==="
 run_mut "K" crates/servelet-h1/src/wire.rs \
   'if let Some(upgrade) = crate::upgrade::take_upgrade(&mut resp) {' \
   'if let Some(upgrade) = None::<crate::upgrade::UpgradeFn> {'
+
+echo "=== mutation L: stop enforcing the WebSocket frame-size ceiling ==="
+# The one that does not merely fail a test: with the guard gone the 2^63 test panics inside the
+# allocator. That is the denial of service this unit exists to remove, caught live.
+run_mut "L" crates/servelet-ws/src/frame.rs \
+  'if len > self.limits.max_frame_bytes || len > usize::MAX as u64 {' \
+  'if false && (len > self.limits.max_frame_bytes || len > usize::MAX as u64) {'
+
+echo
+echo "=== mutation M: accept fragmented and oversized control frames ==="
+run_mut "M" crates/servelet-ws/src/frame.rs \
+  'if is_control && (!fin || len > 125) {' \
+  'if false && is_control && (!fin || len > 125) {'
+
+echo
+echo "=== mutation N: stop enforcing the total-message cap across fragments ==="
+run_mut "N" crates/servelet-ws/src/frame.rs \
+  'if total > self.limits.max_message_bytes {' \
+  'if false && total > self.limits.max_message_bytes {'
+
+echo
+echo "=== mutation O: accept a text message that is not valid UTF-8 ==="
+run_mut "O" crates/servelet-ws/src/frame.rs \
+  'match String::from_utf8(payload) {' \
+  'match Ok::<String, std::string::FromUtf8Error>(String::from_utf8_lossy(&payload).into_owned()) {'
+
+echo
+echo "=== mutation P: stop bounding the request line ==="
+run_mut "P" crates/servelet-h1/src/wire.rs \
+  'read_line_limited(reader, &mut line_buf, limits.max_request_line_bytes).await?;' \
+  'read_line_limited(reader, &mut line_buf, usize::MAX).await?;'
+
+echo
+echo "=== mutation Q: stop counting header lines ==="
+run_mut "Q" crates/servelet-h1/src/wire.rs \
+  'if header_count > limits.max_header_count {' \
+  'if false && header_count > limits.max_header_count {'
+
+echo
+echo "=== mutation R: stop bounding the total header block ==="
+run_mut "R" crates/servelet-h1/src/wire.rs \
+  'if header_bytes > limits.max_header_bytes {' \
+  'if false && header_bytes > limits.max_header_bytes {'
+
+echo
+echo "=== mutation S: stop bounding the request body ==="
+run_mut "S" crates/servelet-h1/src/wire.rs \
+  'if content_length > limits.max_body_bytes {' \
+  'if false && content_length > limits.max_body_bytes {'
+
+echo
+echo "=== mutation T: give the slow-read timeout an effectively infinite deadline ==="
+run_mut "T" crates/servelet-h1/src/wire.rs \
+  'tokio::time::timeout(limits.read_timeout, read_request_buffered(&mut reader, &limits))' \
+  'tokio::time::timeout(std::time::Duration::from_secs(86400), read_request_buffered(&mut reader, &limits))'
+
+echo
+echo "=== mutation U: accept a request carrying BOTH Content-Length and Transfer-Encoding ==="
+run_mut "U" crates/servelet-h1/src/wire.rs \
+  'if content_length.is_some() && te_chunked {' \
+  'if false && content_length.is_some() && te_chunked {'
+
+echo
+echo "=== mutation V: silently take the last of two differing Content-Lengths ==="
+run_mut "V" crates/servelet-h1/src/wire.rs \
+  '(Some(previous), Some(this)) if previous != this => {' \
+  '(_previous, _this) => {}'
+
+echo
+echo "=== mutation W: accept a bare LF in the header block ==="
+run_mut "W" crates/servelet-h1/src/wire.rs \
+  'One rule, both places: CRLF only.
+        if !ends_crlf(&line_buf) {' \
+  'One rule, both places: CRLF only.
+        if false {'
+
+echo
+echo "=== mutation X: leave a lone carriage return inside an SSE field value ==="
+run_mut "X" crates/servelet-sse/src/sse.rs \
+  "if c == '\\r' {" \
+  "if false && c == '\\r' {"
 
 echo
 echo "=== restored suite ==="

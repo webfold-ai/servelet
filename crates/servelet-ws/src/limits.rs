@@ -20,6 +20,9 @@ pub const CLOSE_TOO_BIG: u16 = 1009;
 pub const CLOSE_PROTOCOL_ERROR: u16 = 1002;
 /// Close code: the payload was not the kind the opcode promised (RFC 6455 §7.4.1).
 pub const CLOSE_INVALID_PAYLOAD: u16 = 1007;
+/// Close code: the endpoint is going away (RFC 6455 §7.4.1) -- used when the read deadline
+/// expires and the connection is being reclaimed.
+pub const CLOSE_GOING_AWAY: u16 = 1001;
 
 /// The two ceilings on what one peer may send this crate, per connection.
 ///

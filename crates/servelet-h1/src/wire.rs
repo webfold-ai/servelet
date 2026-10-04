@@ -2,13 +2,72 @@
 
 use super::*;
 
+/// Read one header line into `out`, refusing to grow past `limit` bytes.
+///
+/// REPLACES the moved `reader.read_until(b'\n', &mut line_buf)`, which is the single reason a
+/// peer could make this process allocate whatever it liked: `read_until` grows the buffer until
+/// it finds the newline, so a 10 MB header line is 10 MB of allocation before anything has
+/// decided the request is legitimate. The limit is checked as bytes ARRIVE, from the `BufReader`'s
+/// own buffer, so the worst case is `limit` bytes plus one `BufReader` capacity — never the
+/// peer's chosen length.
+///
+/// Returns `false` at EOF with nothing read (the caller turns that into an error) and `true`
+/// when a line, however empty, was read.
+async fn read_line_limited<R: AsyncRead + Unpin>(
+    reader: &mut BufReader<R>,
+    out: &mut Vec<u8>,
+    limit: usize,
+) -> Result<bool> {
+    loop {
+        let available = reader.fill_buf().await.map_err(Error::Io)?;
+        if available.is_empty() {
+            return Ok(!out.is_empty());
+        }
+        match available.iter().position(|&b| b == b'\n') {
+            Some(at) => {
+                if out.len() + at + 1 > limit {
+                    return Err(Error::Parse(format!(
+                        "header line of more than {limit} bytes"
+                    )));
+                }
+                out.extend_from_slice(&available[..=at]);
+                let taken = at + 1;
+                reader.consume(taken);
+                return Ok(true);
+            }
+            None => {
+                let taken = available.len();
+                if out.len() + taken > limit {
+                    return Err(Error::Parse(format!("header line of more than {limit} bytes")));
+                }
+                out.extend_from_slice(available);
+                reader.consume(taken);
+            }
+        }
+    }
+}
+
+/// A header block ended by CRLF. A bare LF is NOT a line terminator here (RFC 9112 §2.2), and
+/// accepting one is half of the request-smuggling problem: a front proxy that splits on CRLF and
+/// a backend that splits on LF disagree about where the request ends, and the bytes between
+/// their two answers are a second request this server never authorised.
+fn ends_crlf(line: &[u8]) -> bool {
+    line.ends_with(b"\r\n")
+}
+
 async fn read_request_buffered<R: AsyncReadExt + AsyncWriteExt + Unpin>(
     reader: &mut BufReader<R>,
+    limits: &crate::limits::RequestLimits,
 ) -> Result<Request> {
     let mut line_buf = Vec::new();
-    reader.read_until(b'\n', &mut line_buf).await?;
+    read_line_limited(reader, &mut line_buf, limits.max_request_line_bytes).await?;
     if line_buf.is_empty() {
         return Err(Error::Parse("empty request".into()));
+    }
+    if !ends_crlf(&line_buf) {
+        return Err(Error::Parse(
+            "request line must end with CRLF, not a bare LF".into(),
+        ));
     }
     let line = str::from_utf8(&line_buf).map_err(|e| Error::Parse(e.to_string()))?;
     let parts: Vec<&str> = line.trim().splitn(3, ' ').collect();
@@ -26,33 +85,83 @@ async fn read_request_buffered<R: AsyncReadExt + AsyncWriteExt + Unpin>(
     };
 
     let mut headers = HeaderMap::new();
-    let mut content_length = 0usize;
+    let mut content_length: Option<usize> = None;
     let mut te_chunked = false;
+    // Total bytes seen across every header line, and how many there have been. Both are
+    // checked as bytes ARRIVE rather than at the end, so a peer sending an endless header
+    // block is cut off at the ceiling instead of after it has read everything.
+    let mut header_bytes = 0usize;
+    let mut header_count = 0usize;
     loop {
         line_buf.clear();
-        reader.read_until(b'\n', &mut line_buf).await?;
-        if line_buf == b"\r\n" || line_buf == b"\n" || line_buf.is_empty() {
+        if !read_line_limited(reader, &mut line_buf, limits.max_header_bytes).await? {
+            return Err(Error::Parse("connection closed inside the header block".into()));
+        }
+        if line_buf == b"\r\n" || line_buf.is_empty() {
             break;
         }
-        let line = str::from_utf8(&line_buf).map_err(|e| Error::Parse(e.to_string()))?;
-        if let Some((n, v)) = line.split_once(':') {
-            let name = n.parse::<HeaderName>()?;
-            let value = v.trim().parse::<HeaderValue>()?;
-            if name.as_str() == header::CONTENT_LENGTH {
-                content_length = value
-                    .to_str()
-                    .ok()
-                    .and_then(|s| s.parse().ok())
-                    .unwrap_or(0);
-            }
-            if name.as_str() == header::TRANSFER_ENCODING
-                && value.to_str().unwrap_or("").to_ascii_lowercase().contains("chunked")
-            {
-                te_chunked = true;
-            }
-            headers.insert(name, value);
+        // HARDENING (request smuggling): the moved code accepted `b"\n"` as a header line AND as
+        // the end of the header block. A front proxy that frames on CRLF and this server that
+        // frames on LF then disagree about where the request ends, and the gap between their
+        // two answers is a request nobody authorised. One rule, both places: CRLF only.
+        if !ends_crlf(&line_buf) {
+            return Err(Error::Parse(
+                "header line must end with CRLF, not a bare LF".into(),
+            ));
         }
+        header_count += 1;
+        if header_count > limits.max_header_count {
+            return Err(Error::Parse(format!(
+                "more than {} header lines",
+                limits.max_header_count
+            )));
+        }
+        header_bytes += line_buf.len();
+        if header_bytes > limits.max_header_bytes {
+            return Err(Error::Parse(format!(
+                "header block of more than {} bytes",
+                limits.max_header_bytes
+            )));
+        }
+        let line = str::from_utf8(&line_buf).map_err(|e| Error::Parse(e.to_string()))?;
+        let Some((n, v)) = line.split_once(':') else { continue };
+        let name = n.parse::<HeaderName>()?;
+        let value = v.trim().parse::<HeaderValue>()?;
+        if name.as_str() == header::CONTENT_LENGTH {
+            // HARDENING (request smuggling, duplicate Content-Length): the moved code
+            // overwrote `content_length` on every occurrence, so a request carrying
+            // `Content-Length: 5` and `Content-Length: 500` was served with the LAST value and
+            // no complaint. Two values that agree are harmless and are accepted; two that
+            // disagree are the shape of a smuggling attempt and are refused. RFC 9112 §6.3.
+            let parsed = value.to_str().ok().and_then(|s| s.parse::<usize>().ok());
+            match (content_length, parsed) {
+                (Some(previous), Some(this)) if previous != this => {
+                    return Err(Error::Parse(format!(
+                        "two different Content-Length values ({previous} and {this})"
+                    )));
+                }
+                (_, this) => content_length = this,
+            }
+        }
+        if name.as_str() == header::TRANSFER_ENCODING
+            && value.to_str().unwrap_or("").to_ascii_lowercase().contains("chunked")
+        {
+            te_chunked = true;
+        }
+        headers.insert(name, value);
     }
+
+    // HARDENING (request smuggling, Content-Length + Transfer-Encoding): the moved code set
+    // `content_length` OR `te_chunked` and then preferred the content length, silently ignoring
+    // the chunked framing the peer also declared. RFC 9112 §6.1 is unambiguous that a message
+    // with both is ambiguous, and that the recipient must refuse it rather than pick. A front
+    // proxy that picks the other one is the whole attack.
+    if content_length.is_some() && te_chunked {
+        return Err(Error::Parse(
+            "both Content-Length and Transfer-Encoding: chunked present".into(),
+        ));
+    }
+    let content_length = content_length.unwrap_or(0);
 
     let mut body = Vec::new();
     if headers.contains_key("expect") {
@@ -67,6 +176,16 @@ async fn read_request_buffered<R: AsyncReadExt + AsyncWriteExt + Unpin>(
             .await
             .map_err(Error::Io)?;
     }
+    // HARDENING: the moved code did `vec![0u8; content_length]` with no ceiling, so
+    // `Content-Length: 18446744073709551615` was an allocation request the peer wrote. The
+    // bound is checked on the DECLARED length, before the allocation, exactly as the WebSocket
+    // frame bound is in `servelet-ws`.
+    if content_length > limits.max_body_bytes {
+        return Err(Error::Parse(format!(
+            "Content-Length of {content_length} exceeds the {} byte body limit",
+            limits.max_body_bytes
+        )));
+    }
     if content_length > 0 {
         body = vec![0u8; content_length];
         reader.read_exact(&mut body).await?;
@@ -79,7 +198,7 @@ async fn read_request_buffered<R: AsyncReadExt + AsyncWriteExt + Unpin>(
         // per-chunk SigV4 signatures itself, exactly as if the client had connected directly.
         loop {
             let mut size_line = Vec::new();
-            reader.read_until(b'\n', &mut size_line).await?;
+            read_line_limited(reader, &mut size_line, limits.max_header_bytes).await?;
             body.extend_from_slice(&size_line);
             let size_str = std::str::from_utf8(&size_line).unwrap_or("").trim();
             let size = usize::from_str_radix(size_str.split(';').next().unwrap_or("0").trim(), 16)
@@ -88,13 +207,31 @@ async fn read_request_buffered<R: AsyncReadExt + AsyncWriteExt + Unpin>(
                 // Trailers (incl. the `X-Amz-Trailer` checksum) — read raw until blank line.
                 loop {
                     let mut tl = Vec::new();
-                    reader.read_until(b'\n', &mut tl).await?;
-                    body.extend_from_slice(&tl);
-                    if tl == b"\r\n" || tl == b"\n" || tl.is_empty() {
+                    if !read_line_limited(reader, &mut tl, limits.max_header_bytes).await? {
                         break;
+                    }
+                    body.extend_from_slice(&tl);
+                    if tl == b"\r\n" || tl.is_empty() {
+                        break;
+                    }
+                    // HARDENING: trailers are header lines too, and an endless trailer block
+                    // is the same unbounded-accumulation lever the header bound closes.
+                    if body.len() > limits.max_body_bytes {
+                        return Err(Error::Parse(format!(
+                            "chunked body of more than {} bytes",
+                            limits.max_body_bytes
+                        )));
                     }
                 }
                 break;
+            }
+            // HARDENING: a chunk size line can itself claim anything at all, and the moved code
+            // allocated `size + 2` from it unchecked. Checked before the allocation.
+            if body.len() + size + 2 > limits.max_body_bytes {
+                return Err(Error::Parse(format!(
+                    "chunked body of more than {} bytes",
+                    limits.max_body_bytes
+                )));
             }
             let mut chunk = vec![0u8; size + 2]; // data + CRLF
             reader.read_exact(&mut chunk).await?;
@@ -112,6 +249,7 @@ async fn read_request_buffered<R: AsyncReadExt + AsyncWriteExt + Unpin>(
         peer_addr: None,
     })
 }
+
 pub async fn serve<A: ToSocketAddrs>(addr: A, router: Router) -> Result<()> {
     let listener = TcpListener::bind(addr).await?;
     eprintln!("INFO  bedrock::serve  listening");
@@ -136,19 +274,54 @@ pub async fn serve_connection<S: AsyncRead + AsyncWrite + Unpin + Send + 'static
     router: Router,
     peer_addr: Option<std::net::SocketAddr>,
 ) {
+    serve_connection_with_limits(stream, router, peer_addr, crate::limits::RequestLimits::default()).await
+}
+
+/// [`serve_connection`] with the request-head, body and slow-read ceilings stated by the caller.
+///
+/// The defaulted [`serve_connection`] is what a consumer gets and is the moved signature,
+/// unchanged; this is the one to reach for when a deployment's requests are legitimately bigger
+/// or slower than the published defaults. Every limit and its default is in
+/// `docs/HARDENING.md`.
+pub async fn serve_connection_with_limits<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
+    stream: S,
+    router: Router,
+    peer_addr: Option<std::net::SocketAddr>,
+    limits: crate::limits::RequestLimits,
+) {
     let mut reader = BufReader::with_capacity(8192, stream);
     // CUT (docs/SPINE.md "Deviations"): the h2c-preface sniff (RFC 7540 3.4, "prior knowledge")
     // that stood here is `servelet-h2`'s to reinstate. It matched
     // `crate::httpsrv::httpx::h2::PREFACE`, another crate's constant. Everything after the sniff
     // is HTTP/1.1 line framing, byte-for-byte unchanged.
     loop {
-        let req = match read_request_buffered(&mut reader).await {
+        // HARDENING: the whole of one request gets a deadline. The moved code had none, so a
+        // peer that opened a connection and sent one byte every ten seconds held the stream, its
+        // `BufReader` and its task open for as long as it liked -- which is a connection-exhaustion
+        // lever that costs the attacker one byte at a time.
+        let read = tokio::time::timeout(limits.read_timeout, read_request_buffered(&mut reader, &limits)).await;
+        let parsed = match read {
+            Ok(Ok(req)) => Ok(req),
+            Ok(Err(e)) => Err(e),
+            // A timeout, not a parse error: the peer did not send a malformed request, it sent a
+            // slow one. The refusal below is the same, which is what a client can act on.
+            Err(_) => Err(Error::Parse(format!(
+                "the request did not arrive within {:?}",
+                limits.read_timeout
+            ))),
+        };
+        let req = match parsed {
             Ok(req) => match peer_addr {
                 Some(addr) => req.with_peer_addr(addr),
                 None => req,
             },
             Err(e) => {
                 eprintln!("DEBUG  target=bedrock::serve");  // was: DEBUG target: "bedrock::serve", error = %e, "connection closed while reading request"
+                // HARDENING: the moved code broke here and closed the socket with nothing said,
+                // so a client could not tell a malformed request from a dropped connection. A
+                // `400` with a zero-length body costs one small write and is the only thing
+                // standing between "your request was refused" and "retry forever".
+                write_bad_request(&mut reader, &e).await;
                 break;
             }
         };
@@ -215,8 +388,30 @@ fn connection_close(headers: &HeaderMap) -> bool {
 }
 
 pub async fn read_request(stream: &mut TcpStream) -> Result<Request> {
+    read_request_with_limits(stream, crate::limits::RequestLimits::default()).await
+}
+
+/// [`read_request`] under caller-stated ceilings — the single-request read a proxy uses when it
+/// is reading a request it is going to forward rather than serve.
+pub async fn read_request_with_limits(
+    stream: &mut TcpStream,
+    limits: crate::limits::RequestLimits,
+) -> Result<Request> {
     let mut reader = BufReader::new(stream);
-    read_request_buffered(&mut reader).await
+    read_request_buffered(&mut reader, &limits).await
+}
+
+/// The refusal written when a request will not parse. Deliberately tiny and deliberately a
+/// `400`: the body names the rule that was broken and nothing else, because the input it was
+/// derived from is attacker-chosen and this string can end up in a log.
+async fn write_bad_request<W: AsyncWriteExt + Unpin>(writer: &mut W, why: &Error) {
+    let body = why.to_string();
+    let response = format!(
+        "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    let _ = writer.write_all(response.as_bytes()).await;
+    let _ = writer.flush().await;
 }
 
 pub async fn write_response<W: AsyncWriteExt + Unpin>(

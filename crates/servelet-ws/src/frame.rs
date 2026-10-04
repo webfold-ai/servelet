@@ -2,7 +2,9 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use servelet_core::{Error, Result};
 
-use crate::limits::{WsLimits, CLOSE_INVALID_PAYLOAD, CLOSE_PROTOCOL_ERROR, CLOSE_TOO_BIG};
+use crate::limits::{
+    WsLimits, CLOSE_GOING_AWAY, CLOSE_INVALID_PAYLOAD, CLOSE_PROTOCOL_ERROR, CLOSE_TOO_BIG,
+};
 
 /// A decoded WebSocket message.
 #[derive(Clone, Debug, PartialEq)]
@@ -54,6 +56,12 @@ pub struct WebSocket<S> {
     /// Whether a fragmented message is currently open. Distinguishes "the first continuation of
     /// a message" from "a continuation with nothing to continue", which is a protocol error.
     pub(crate) msg_active: bool,
+    /// How long a read may make no progress before the connection is reclaimed. `None` (the
+    /// default) means no deadline at all -- see [`WebSocket::with_idle_timeout`].
+    pub(crate) idle_timeout: Option<std::time::Duration>,
+    /// When no bytes have arrived for this long, send a Ping and keep waiting. `None` (the
+    /// default) means no keepalive -- see [`WebSocket::with_ping_interval`].
+    pub(crate) ping_interval: Option<std::time::Duration>,
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> WebSocket<S> {
@@ -69,8 +77,75 @@ impl<S: AsyncRead + AsyncWrite + Unpin> WebSocket<S> {
         &self.limits
     }
 
-    /// Read exactly `n` bytes — from `pending` first, then the socket for the rest.
+    /// Reclaim the connection if no bytes arrive for `timeout`.
+    ///
+    /// OFF by default, deliberately. A deadline that expires closes a connection that may have
+    /// been quiet but perfectly alive, and a library that picks that deadline for the
+    /// application gets it wrong for somebody. What the library owes is a way to set one, and
+    /// the fact that without one a peer can hold a connection open forever.
+    pub fn with_idle_timeout(mut self, timeout: std::time::Duration) -> Self {
+        self.idle_timeout = Some(timeout);
+        self
+    }
+
+    /// Send a Ping when no bytes have arrived for `interval`, and keep waiting.
+    ///
+    /// The ping is the polite half of the same problem: a NAT or a load balancer drops an idle
+    /// flow after a few tens of seconds, and RFC 6455 §5.5.2 requires the endpoint to answer a
+    /// ping with a pong, so a ping every so often keeps the path open AND proves the peer is
+    /// still there. It does not end the connection -- that is [`Self::with_idle_timeout`], and
+    /// it should be set to comfortably more than the ping interval, or the connection will be
+    /// closed between two pings.
+    pub fn with_ping_interval(mut self, interval: std::time::Duration) -> Self {
+        self.ping_interval = Some(interval);
+        self
+    }
+
+    /// Read exactly `n` bytes, under whatever idle timeout and ping interval this connection
+    /// carries.
+    ///
+    /// The moved `read_n` waited forever, so a peer that completed the handshake and then went
+    /// quiet held the connection, its buffers and its task for as long as it liked. Two
+    /// optional behaviours fix that, and the order between them is the whole design:
+    ///
+    ///   * if there is a ping interval AND it is shorter than the read timeout, wait that long;
+    ///     if nothing has arrived, send a Ping and wait again;
+    ///   * if the read timeout as a whole elapses with nothing arriving, close with 1001 and
+    ///     report why.
+    ///
+    /// With neither configured this is exactly the moved behaviour, one extra branch.
     async fn read_n(&mut self, n: usize) -> Result<Vec<u8>> {
+        let Some(idle) = self.idle_timeout else {
+            return self.read_n_raw(n).await;
+        };
+        let keepalive = self.ping_interval.filter(|p| *p < idle);
+        loop {
+            let first = match keepalive {
+                Some(p) => p,
+                None => idle,
+            };
+            // Bound to a local so the mutable borrow of `self` ends before the timeout arm can
+            // call back into `self` to write a Ping or a Close.
+            let outcome = tokio::time::timeout(first, self.read_n_raw(n)).await;
+            match outcome {
+                Ok(result) => return result,
+                Err(_) => {
+                    if let Some(p) = keepalive {
+                        let _ = self.write_frame(OP_PING, &[]).await;
+                        continue;
+                    }
+                    self.close_with_code(CLOSE_GOING_AWAY).await;
+                    return Err(Error::Http(format!(
+                        "no data from the peer within {idle:?}"
+                    )));
+                }
+            }
+        }
+    }
+
+    /// Read exactly `n` bytes — from `pending` first, then the socket for the rest. The moved
+    /// body, unchanged; [`Self::read_n`] is the version with the deadline.
+    async fn read_n_raw(&mut self, n: usize) -> Result<Vec<u8>> {
         let mut out = vec![0u8; n];
         let from_pending = self.pending.len().min(n);
         if from_pending > 0 {

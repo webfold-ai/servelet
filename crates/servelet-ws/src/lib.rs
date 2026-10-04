@@ -32,7 +32,9 @@ mod limits;
 pub use client::{connect, connect_with_limits};
 pub use frame::{Message, WebSocket};
 pub use handshake::{base64_encode, compute_accept_key, generate_key, sha1};
-pub use limits::{WsLimits, CLOSE_INVALID_PAYLOAD, CLOSE_PROTOCOL_ERROR, CLOSE_TOO_BIG};
+pub use limits::{
+    WsLimits, CLOSE_GOING_AWAY, CLOSE_INVALID_PAYLOAD, CLOSE_PROTOCOL_ERROR, CLOSE_TOO_BIG,
+};
 
 use servelet_core::{Error, Method, Request, Result};
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};/// Server side: given a raw `TcpStream`, the already-parsed upgrade `Request` (the caller's own
@@ -74,7 +76,7 @@ pub async fn accept_with_limits<S: AsyncRead + AsyncWrite + Unpin>(
         "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept_key}\r\n\r\n"
     );
     stream.write_all(response.as_bytes()).await.map_err(Error::Io)?;
-    Ok(WebSocket { stream, is_client: false, pending, limits, msg_buf: Vec::new(), msg_opcode: 0, msg_active: false })
+    Ok(WebSocket { stream, is_client: false, pending, limits, msg_buf: Vec::new(), msg_opcode: 0, msg_active: false, idle_timeout: None, ping_interval: None })
 }
 
 /// splitmix64 — the crate's non-cryptographic clock-seeded randomness, verbatim from

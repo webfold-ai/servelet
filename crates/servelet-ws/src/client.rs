@@ -68,7 +68,7 @@ pub async fn connect_with_limits(url: &str, limits: WsLimits) -> Result<WebSocke
         unreachable!("connect() only ever builds a Plain stream")
     };
     match accept {
-        Some(a) if a == expected => Ok(WebSocket { stream, is_client: true, pending, limits, msg_buf: Vec::new(), msg_opcode: 0, msg_active: false }),
+        Some(a) if a == expected => Ok(WebSocket { stream, is_client: true, pending, limits, msg_buf: Vec::new(), msg_opcode: 0, msg_active: false, idle_timeout: None, ping_interval: None }),
         Some(a) => Err(Error::Http(format!("Sec-WebSocket-Accept mismatch: got {a}, expected {expected}"))),
         None => Err(Error::Http("server response missing Sec-WebSocket-Accept".to_string())),
     }

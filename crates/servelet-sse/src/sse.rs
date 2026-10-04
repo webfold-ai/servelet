@@ -243,15 +243,42 @@ impl SseParser {
         Self::parse_block(block.trim_end_matches('\n').trim_end_matches('\r'))
     }
 
+    /// CR, LF and CRLF are three spellings of ONE line terminator in the event-stream grammar
+    /// (WHATWG HTML §"Interpreting an event stream"), but Rust's `str::lines` knows only about
+    /// `\n` and strips a single trailing `\r`. A lone CR in the middle of a field therefore
+    /// survives into the parsed value — and a lone CR is a line break to every consumer
+    /// downstream that matters (a log writer, a terminal, a CSV reader), which makes a field
+    /// value carrying one a forgery primitive rather than a cosmetic bug.
+    ///
+    /// CRLF collapses to a single LF rather than becoming two: otherwise a peer could inject a
+    /// blank line with a `\r` and split one event into two, which is exactly what this function
+    /// exists to prevent.
+    fn normalise_line_endings(block: &str) -> String {
+        let mut out = String::with_capacity(block.len());
+        let mut chars = block.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '\r' {
+                if chars.peek() == Some(&'\n') {
+                    chars.next();
+                }
+                out.push('\n');
+            } else {
+                out.push(c);
+            }
+        }
+        out
+    }
+
     fn parse_block(block: &str) -> Option<SseEvent> {
         if block.trim().is_empty() {
             return None;
         }
+        let normalised = Self::normalise_line_endings(block);
         let mut event = None;
         let mut data = String::new();
         let mut id = None;
         let mut saw_data = false;
-        for line in block.lines() {
+        for line in normalised.lines() {
             let (field, value) = match line.split_once(':') {
                 Some((f, v)) => (f.trim(), v.trim_start()),
                 None => (line.trim(), ""),
