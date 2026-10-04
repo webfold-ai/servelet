@@ -45,7 +45,12 @@ fn a_percent_sign_with_one_hex_digit_is_passed_through_literally() {
 fn an_unterminated_escape_mid_string_is_passed_through() {
     assert_eq!(percent_decode("a%"), "a%");
     assert_eq!(percent_decode("value=%"), "value=%");
-    assert_eq!(percent_decode("query%41"), "query%41");
+    // A genuinely unterminated escape, not at index 0. The earlier version of this line read
+    // `query%41` and expected it unchanged -- but `%41` is a COMPLETE escape (`41` is hex), so
+    // it decodes to "queryA", and asserting otherwise was a wrong expectation, not a bug.
+    assert_eq!(percent_decode("query%4"), "query%4");
+    assert_eq!(percent_decode("query%"), "query%");
+    assert_eq!(percent_decode("query%41"), "queryA", "a complete escape decodes, wherever it sits");
 }
 
 /// Two hex digits that are not hex at all. The escape is undecodable, so the WHOLE thing —
@@ -128,8 +133,19 @@ fn a_long_run_of_truncated_escapes_does_not_blow_up() {
 #[test]
 fn alternating_decodable_and_truncated_escapes_stay_in_step() {
     assert_eq!(percent_decode("%41%42%43"), "ABC");
-    assert_eq!(percent_decode("%41%%42%"), "A%42%");
-    assert_eq!(percent_decode("+%41%2+%4"), " A%2%4");
+    // `%41%%42%`: the `%` at index 3 is followed by `%4`, which is not two hex digits, so that
+    // `%` is LITERAL and parsing resumes at the next byte -- where a perfectly valid `%42`
+    // begins. So it decodes to `B`. The earlier expectation of "A%42%" encoded a different rule
+    // (swallow the whole three-byte window as literal whenever the window is not hex), which is
+    // not what this decoder does and not what the WHATWG percent-decode does: it keeps the `%`
+    // and re-syncs on the next byte. Left as the moved code has it, since that behaviour is
+    // what 58 live call sites in ptyktos-api decode with.
+    assert_eq!(percent_decode("%41%%42%"), "A%B%");
+    // `+%41%2+%4`: space, `A`, then `%2+` is not hex so the `%` is literal, then `2`, then the
+    // `+` at index 6 is a FORM-ENCODED SPACE like any other, then a truncated `%4`. The earlier
+    // expectation " A%2%4" silently dropped that `+` -- and it never ran before, because the
+    // assertion above it panicked first.
+    assert_eq!(percent_decode("+%41%2+%4"), " A%2 %4");
 }
 
 /// `+` is the form-encoded space, and it is decoded wherever a `%` would be. The two must not
