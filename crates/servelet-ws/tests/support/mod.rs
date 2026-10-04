@@ -39,9 +39,7 @@ pub async fn spawn_ws_server(limits: WsLimits) -> (SocketAddr, tokio::sync::mpsc
     let addr = listener.local_addr().unwrap();
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
     tokio::spawn(async move {
-        eprintln!("SERVER task started");
         let (mut stream, _) = listener.accept().await.unwrap();
-        eprintln!("SERVER accepted");
         let req = match read_handshake_request(&mut stream).await {
             Some(r) => r,
             None => {
@@ -49,11 +47,9 @@ pub async fn spawn_ws_server(limits: WsLimits) -> (SocketAddr, tokio::sync::mpsc
                 return;
             }
         };
-        eprintln!("SERVER head: {:?}", req.headers().get("sec-websocket-key"));
         let mut ws = match accept_with_limits(stream, &req, Vec::new(), limits).await {
             Ok(ws) => ws,
             Err(e) => {
-                eprintln!("SERVER accept failed: {e}");
                 let _ = tx.send(format!("error accept failed: {e}"));
                 return;
             }
@@ -131,9 +127,15 @@ impl RawWs {
     /// Read until the response head's blank line, returning the head's bytes.
     async fn fill_until_head(&mut self) -> Vec<u8> {
         let mut head = Vec::new();
+        // Into a FIXED-SIZE buffer, not into `head` itself: `head` starts with zero capacity,
+        // and tokio's `read` treats a zero-remaining ReadBuf as end-of-stream and returns Ok(0)
+        // without touching the socket. That looks exactly like "the server closed the
+        // connection", which is how this harness spent a debugging cycle looking the wrong way.
+        let mut chunk = [0u8; 4096];
         while !head.ends_with(b"\r\n\r\n") {
-            let n = self.stream.read(&mut head).await.unwrap();
+            let n = self.stream.read(&mut chunk).await.unwrap();
             assert!(n > 0, "the server closed before finishing its handshake response");
+            head.extend_from_slice(&chunk[..n]);
         }
         head
     }
@@ -237,8 +239,13 @@ impl RawWs {
         let mut got = 0;
         while got < buf.len() {
             if self.buf.is_empty() {
-                let n = self.stream.read(&mut self.buf).await.unwrap();
+                // Fixed-size chunk, never `&mut self.buf` directly: see `fill_until_head`. An
+                // empty Vec has zero capacity and tokio's `read` reports end-of-stream on a
+                // zero-remaining buffer instead of reading.
+                let mut chunk = [0u8; 4096];
+                let n = self.stream.read(&mut chunk).await.unwrap();
                 assert!(n > 0, "the server closed the connection mid-frame");
+                self.buf.extend_from_slice(&chunk[..n]);
             }
             let take = (buf.len() - got).min(self.buf.len());
             buf[got..got + take].copy_from_slice(&self.buf[..take]);
@@ -249,7 +256,8 @@ impl RawWs {
 
     /// True once the server has closed its half of the connection.
     pub async fn is_closed(&mut self) -> bool {
-        self.stream.read(&mut self.buf).await.map(|n| n == 0).unwrap_or(true)
+        let mut chunk = [0u8; 256];
+        self.stream.read(&mut chunk).await.map(|n| n == 0).unwrap_or(true)
     }
 }
 

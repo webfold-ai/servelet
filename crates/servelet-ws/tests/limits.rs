@@ -183,7 +183,7 @@ async fn a_normal_frame_still_round_trips_after_the_limits_were_added() {
     assert_eq!(next_report(&mut rx).await.unwrap(), "message Text(\"hello\")");
     // The codec answers the ping itself (RFC 6455 §5.5.2), which is still true after the change.
     ws.send_frame(0x89, b"ping").await;
-    assert_eq!(next_report(&mut rx).await.unwrap(), "message Ping(b\"ping\".to_vec())");
+    assert_eq!(next_report(&mut rx).await.unwrap(), "message Ping([112, 105, 110, 103])");
     assert_eq!(ws.read_frame().await, (0x8A, b"ping".to_vec()));
     // Unused import guard: `Message` is named above only in doc prose; keep it referenced so the
     // file does not depend on that being true.

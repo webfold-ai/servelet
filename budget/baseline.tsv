@@ -7,4 +7,4 @@ servelet-router	414	372	-
 servelet-sse	538	278	-
 servelet-tls	133	116	-
 servelet-uri	76	76	-
-servelet-ws	386	139	-
+servelet-ws	535	183	raised by the hardening unit: src/limits.rs (78, new -- the inbound WsLimits ceilings and the RFC 6455 close codes) + the frame-limit guard, the per-connection with_limits accessor and the close_with_code helper in frame.rs; docs/HARDENING.md
