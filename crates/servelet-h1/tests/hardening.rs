@@ -172,7 +172,7 @@ async fn a_header_block_over_the_total_byte_limit_is_refused() {
     // 90 lines of 1 KiB: under the 100-line count limit, over the 64 KiB total.
     for i in 0..90 {
         let mut line = format!("X-H{i}: ");
-        line.resize(1024, 'v');
+        line.push_str(&"v".repeat(1024 - line.len()));
         request.extend_from_slice(line.as_bytes());
         request.extend_from_slice(b"\r\n");
     }
@@ -336,7 +336,7 @@ async fn a_peer_trickling_one_byte_per_second_is_dropped() {
 /// independently of how long the shipped default happens to be.
 #[tokio::test]
 async fn a_slow_peer_is_dropped_on_a_caller_stated_deadline() {
-    let addr = spawn_with(RequestLimits::default().read_timeout(Duration::from_millis(500))).await;
+    let addr = spawn_with(RequestLimits { read_timeout: Duration::from_millis(500), ..RequestLimits::default() }).await;
     let mut stream = TcpStream::connect(addr).await.unwrap();
 
     stream.write_all(b"GET /ok HTTP/1.1\r\n").await.unwrap();
@@ -447,7 +447,7 @@ async fn a_bare_line_feed_inside_a_header_is_answered_400() {
 async fn a_bare_line_feed_as_the_head_terminator_is_answered_400() {
     let addr = spawn_default().await;
     let request = b"GET /ok HTTP/1.1\r\nHost: x\n\r\nGET /admin HTTP/1.1\r\nHost: internal\r\n\r\n";
-    let reply = exchange(addr, &request).await;
+    let reply = exchange(addr, request).await;
     assert_refused(&reply);
     assert!(
         !String::from_utf8_lossy(&reply).contains("/admin"),
