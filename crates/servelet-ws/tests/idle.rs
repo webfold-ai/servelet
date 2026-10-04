@@ -22,7 +22,7 @@ mod support;
 use std::time::Duration;
 
 use servelet_ws::{CLOSE_GOING_AWAY, WsLimits};
-use support::{next_report, spawn_ws_server, spawn_ws_server_timed, RawWs};
+use support::{next_report, spawn_ws_server, spawn_ws_server_echoing, spawn_ws_server_timed, RawWs};
 use tokio::time::{timeout, Instant};
 
 /// Read frames until one arrives, failing the test if none does in time. Returns the opcode's
@@ -70,7 +70,7 @@ async fn a_peer_that_never_sends_anything_is_closed_after_the_read_timeout() {
 /// and a ping every so often both keeps the path open and proves the peer is still there.
 #[tokio::test]
 async fn an_idle_peer_is_pinged_rather_than_dropped() {
-    let (addr, _rx) = spawn_ws_server_timed(
+    let (addr, _rx) = spawn_ws_server_echoing(
         WsLimits::default(),
         Some(Duration::from_millis(3000)),
         Some(Duration::from_millis(250)),
@@ -86,10 +86,14 @@ async fn an_idle_peer_is_pinged_rather_than_dropped() {
         assert!(payload.is_empty(), "the keepalive ping carries no payload");
     }
 
-    // The peer answers it, and the connection is still usable afterwards.
+    // The peer answers it, and the connection is still usable afterwards. The server ECHOES, so
+    // the text coming back is proof the socket survived the idle period -- previously this read
+    // waited for an echo from a server that never echoed anything, and saw a Ping instead.
     ws.send_frame(0x8A, b"").await;
     ws.send_frame(0x81, b"still here").await;
-    assert_eq!(ws.read_frame().await.0 & 0x0F, 0x1, "the connection survived the idle period");
+    let (fin_opcode, payload) = next_frame(&mut ws, Duration::from_secs(2)).await;
+    assert_eq!(fin_opcode & 0x0F, 0x1, "the connection survived the idle period");
+    assert_eq!(payload, b"still here");
 }
 
 /// A peer that KEEPS TALKING must never be pinged or dropped. This is the false-positive case,
@@ -97,7 +101,7 @@ async fn an_idle_peer_is_pinged_rather_than_dropped() {
 /// in the wrong place.
 #[tokio::test]
 async fn a_peer_that_keeps_talking_is_never_pinged_or_dropped() {
-    let (addr, mut rx) = spawn_ws_server_timed(
+    let (addr, mut rx) = spawn_ws_server_echoing(
         WsLimits::default(),
         Some(Duration::from_millis(400)),
         Some(Duration::from_millis(150)),
@@ -105,15 +109,13 @@ async fn a_peer_that_keeps_talking_is_never_pinged_or_dropped() {
     .await;
     let mut ws = RawWs::connect(addr).await;
 
-    // Nine messages over ~900ms -- every gap well under the 150ms ping interval and the 400ms
-    // read timeout, so neither deadline should ever fire.
+    // Nine messages ~100ms apart -- every gap well under the 150ms ping interval and the 400ms
+    // read timeout, so neither deadline should ever fire. Each echo is read BEFORE the next
+    // message is sent: the earlier version sent all nine and only then read, which left the peer
+    // silent for the whole read-back and let a perfectly legitimate Ping be the first thing it
+    // saw. "Never pinged while talking" has to be observed WHILE it is talking.
     for i in 0..9 {
         ws.send_frame(0x81, format!("m{i}").as_bytes()).await;
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
-
-    // Nothing but the echoed messages came back: no ping, no close.
-    for i in 0..9 {
         let (fin_opcode, payload) = next_frame(&mut ws, Duration::from_secs(2)).await;
         assert_eq!(
             fin_opcode & 0x0F,
@@ -121,29 +123,43 @@ async fn a_peer_that_keeps_talking_is_never_pinged_or_dropped() {
             "message {i}: expected the echoed text, got opcode {fin_opcode:#x} -- a deadline fired early"
         );
         assert_eq!(payload, format!("m{i}").as_bytes());
-        assert_eq!(
-            next_report(&mut rx).await.unwrap(),
-            format!("message Text(\"m{i}\")")
-        );
+        assert_eq!(next_report(&mut rx).await.unwrap(), format!("message Text(\"m{i}\")"));
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
 
 /// THE default. With nothing configured, a silent peer is NOT reclaimed -- which is what
 /// "optional" means, and what no other test in this file would notice if it quietly stopped
 /// being true. The moved behaviour is preserved exactly.
+///
+/// This observes for a BOUNDED WINDOW and then passes. The earlier version of this test slept
+/// and then did an unbounded `read_frame()`, which -- against a server that echoes nothing --
+/// blocks forever: that is the 25-minute hang, and the hang was the test's fault, not the
+/// code's. "Not dropped" is asserted the only way it can be asserted without waiting forever:
+/// nothing at all arrives during the window, and the connection still works afterwards.
 #[tokio::test]
 async fn with_no_deadline_configured_a_silent_peer_is_not_dropped() {
-    let (addr, mut rx) = spawn_ws_server(WsLimits::default()).await;
+    let (addr, mut rx) = spawn_ws_server_echoing(WsLimits::default(), None, None).await;
     let mut ws = RawWs::connect(addr).await;
 
     // Silent for 1.5s -- three times the read timeout any of the tests above uses, so if a
     // default deadline had crept in it would already have fired.
-    tokio::time::sleep(Duration::from_millis(1500)).await;
+    let silence = tokio::time::timeout(Duration::from_millis(1500), ws.read_frame()).await;
+    assert!(
+        silence.is_err(),
+        "with no deadline configured nothing may be sent at all: {silence:?}"
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_millis(200), ws.is_closed()).await.is_err(),
+        "and the connection must not have been closed"
+    );
 
     // Still alive: a frame written now comes back.
     ws.send_frame(0x81, b"quiet but fine").await;
     assert_eq!(next_report(&mut rx).await.unwrap(), "message Text(\"quiet but fine\")");
-    assert_eq!(ws.read_frame().await.0 & 0x0F, 0x1, "the connection is still up");
+    let (fin_opcode, payload) = next_frame(&mut ws, Duration::from_secs(2)).await;
+    assert_eq!(fin_opcode & 0x0F, 0x1, "the connection is still up");
+    assert_eq!(payload, b"quiet but fine");
 }
 
 /// The ping must not fire when the peer is merely slow but still arriving — one byte every
@@ -161,8 +177,16 @@ async fn a_slow_but_progressing_peer_is_not_pinged() {
 
     // Deliver one fragment of a fragmented text message every 100ms, for five fragments. Each
     // fragment is a frame, but the MESSAGE is incomplete throughout.
-    for _ in 0..5 {
-        ws.send_frame(0x01, b"x").await;
+    //
+    // The first fragment is FIN=0 Text (0x01) and the REST are CONTINUATIONs (0x00) with FIN
+    // clear, then a final continuation with FIN set (0x80). The earlier version sent five 0x01
+    // frames, which is a NEW TEXT frame arriving inside a fragmented message -- RFC 6455 §5.4
+    // calls that a protocol error, and the server correctly closed the connection, so the test
+    // was measuring its own malformed input.
+    ws.send_frame(0x01, b"x").await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    for _ in 0..4 {
+        ws.send_frame(0x00, b"x").await;
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     ws.send_frame(0x80, b"y").await;

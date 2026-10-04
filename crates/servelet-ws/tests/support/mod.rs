@@ -45,6 +45,34 @@ pub async fn spawn_ws_server_timed(
     idle_timeout: Option<Duration>,
     ping_interval: Option<Duration>,
 ) -> (SocketAddr, tokio::sync::mpsc::UnboundedReceiver<String>) {
+    spawn_ws_server_full(limits, idle_timeout, ping_interval, false).await
+}
+
+/// As [`spawn_ws_server_timed`], but the server ECHOES every message it receives back to the
+/// peer as a text frame.
+///
+/// The idle tests need this. "A peer that keeps talking is never pinged" and "the connection
+/// survived the idle period" are claims about what the server does NOT send — and a server that
+/// only ever reports through the channel sends nothing a client can observe, so the tests were
+/// reading frames that could never arrive. Echoing is what a real route does, and it makes the
+/// absence of a Ping or a Close something the client can see rather than infer.
+///
+/// Opt-in rather than default: the fragmentation and limit tests assert on the reported channel
+/// and would have to tolerate frames arriving they do not read.
+pub async fn spawn_ws_server_echoing(
+    limits: WsLimits,
+    idle_timeout: Option<Duration>,
+    ping_interval: Option<Duration>,
+) -> (SocketAddr, tokio::sync::mpsc::UnboundedReceiver<String>) {
+    spawn_ws_server_full(limits, idle_timeout, ping_interval, true).await
+}
+
+pub async fn spawn_ws_server_full(
+    limits: WsLimits,
+    idle_timeout: Option<Duration>,
+    ping_interval: Option<Duration>,
+    echo: bool,
+) -> (SocketAddr, tokio::sync::mpsc::UnboundedReceiver<String>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
@@ -75,6 +103,13 @@ pub async fn spawn_ws_server_timed(
         loop {
             match ws.recv().await {
                 Ok(msg) => {
+                    if echo {
+                        // Best effort: the peer may legitimately have gone away, and the point
+                        // of this harness is what the server DOES, not what survives a dead peer.
+                        if let servelet_ws::Message::Text(text) = &msg {
+                            let _ = ws.send_text(text).await;
+                        }
+                    }
                     let _ = tx.send(format!("message {msg:?}"));
                 }
                 Err(e) => {
