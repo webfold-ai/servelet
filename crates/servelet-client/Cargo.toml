@@ -31,4 +31,8 @@ default = []
 tls = ["dep:rustls", "dep:tokio-rustls", "dep:rustls-native-certs", "dep:rustls-pki-types"]
 
 [dev-dependencies]
+# Real-socket tests drive the client against a live servelet server as well as a
+# hand-rolled one, so they need the serving half as a dev-dep only.
+servelet-router = { path = "../servelet-router" }
+servelet-h1 = { path = "../servelet-h1" }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "net", "io-util", "time"] }

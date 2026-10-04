@@ -3,11 +3,6 @@
 version = 4
 
 [[package]]
-name = "apeiron"
-version = "0.1.0"
-source = "git+https://gitlab.tas.twn.network/lucas/apeiron.git?rev=da01485#da01485d24be8900824750431a70f19100bee200"
-
-[[package]]
 name = "bitflags"
 version = "2.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -81,9 +76,8 @@ dependencies = [
 [[package]]
 name = "hashtrinity"
 version = "0.1.0"
-source = "git+https://gitlab.tas.twn.network/twn/ptyktos/hashtrinity.git?branch=main#d656765b6ee7f85caff8c149e6a228df94fa7f80"
+source = "git+https://gitlab.tas.twn.network/twn/ptyktos/hashtrinity.git?branch=main#86f148e4e160447c5bae92760f7bd4e95bbfc494"
 dependencies = [
- "apeiron",
  "hashtrinity_derive",
  "rustls",
  "serde",
@@ -93,7 +87,7 @@ dependencies = [
 [[package]]
 name = "hashtrinity_derive"
 version = "0.1.0"
-source = "git+https://gitlab.tas.twn.network/twn/ptyktos/hashtrinity.git?branch=main#d656765b6ee7f85caff8c149e6a228df94fa7f80"
+source = "git+https://gitlab.tas.twn.network/twn/ptyktos/hashtrinity.git?branch=main#86f148e4e160447c5bae92760f7bd4e95bbfc494"
 
 [[package]]
 name = "itoa"
@@ -121,9 +115,9 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "mio"
-version = "1.2.3"
+version = "1.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b18443e9c262bfe8fa82f51666e2642c53393f7e5c27b3e1aeab922cff5b9d8"
+checksum = "1788edb87fdc09c7e26304471e2f5be8cdefb1b6930d6e3985fc02ff53bf86ee"
 dependencies = [
  "libc",
  "wasi",
@@ -310,6 +304,8 @@ dependencies = [
  "rustls-native-certs",
  "rustls-pki-types",
  "servelet-core",
+ "servelet-h1",
+ "servelet-router",
  "tokio",
  "tokio-rustls",
 ]

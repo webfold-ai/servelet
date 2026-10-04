@@ -379,14 +379,6 @@ pub async fn serve_connection_with_limits<S: AsyncRead + AsyncWrite + Unpin + Se
     let _ = reader.shutdown().await;
 }
 
-fn connection_close(headers: &HeaderMap) -> bool {
-    headers
-        .get(header::CONNECTION)
-        .and_then(|v| v.to_str().ok())
-        .map(|v| v.to_ascii_lowercase().contains("close"))
-        .unwrap_or(false)
-}
-
 pub async fn read_request(stream: &mut TcpStream) -> Result<Request> {
     read_request_with_limits(stream, crate::limits::RequestLimits::default()).await
 }

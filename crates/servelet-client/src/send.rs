@@ -3,25 +3,15 @@
 use std::io;
 use std::str;
 
-use servelet_core::{header, Error, Extensions, HeaderMap, HeaderName, HeaderValue, Method, Response, Result, StatusCode, Uri, Version};
+// `connection_close` lives in servelet-core, not in servelet-h1. A previous pass put it in
+// h1 on the reasoning that a client must not depend on the server stack to read one header —
+// that reasoning is right, and h1 is the wrong answer to it, because h1 *is* the server stack.
+// `servelet-core` is already a dependency of this crate, so hoisting it there satisfies the
+// constraint instead of violating it. One expression, two call sites, one answer.
+use servelet_core::{connection_close, header, Error, Extensions, HeaderMap, HeaderName, HeaderValue, Method, Response, Result, StatusCode, Uri, Version};
 
 use crate::pool::{identity_for, pool_put, PooledConn};
 use crate::stream::{Stream, StreamReader};
-
-/// Whether the peer asked to close the connection.
-///
-/// DEVIATION, six lines: biota had exactly ONE `connection_close` (kernel.rs:3008), in the
-/// SERVER half, and the client half called it from across the same crate. It now lives in
-/// `servelet-h1`, where the server half moved -- and a client that pulled in the whole server
-/// stack (router, accept loop, graceful drain) to read one header would be exactly the wrong
-/// dependency (rule 1, rule 6). Same expression, byte for byte.
-fn connection_close(headers: &HeaderMap) -> bool {
-    headers
-        .get(header::CONNECTION)
-        .and_then(|v| v.to_str().ok())
-        .map(|v| v.to_ascii_lowercase().contains("close"))
-        .unwrap_or(false)
-}
 
 /// Write the request line, headers, and body — shared by the buffered (`send_request`) and
 /// streaming (`send_request_streaming`) paths; they only diverge on how the RESPONSE body gets

@@ -33,7 +33,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use servelet_core::{header, Error, Extensions, HeaderMap, HeaderName, HeaderValue, Method, Request, Response, Result, Uri, Version, status_reason};
+use servelet_core::{connection_close, header, Error, Extensions, HeaderMap, HeaderName, HeaderValue, Method, Request, Response, Result, Uri, Version, status_reason};
 use servelet_router::Router;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tracing::Instrument;

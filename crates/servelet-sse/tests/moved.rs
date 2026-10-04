@@ -59,3 +59,45 @@ mod moved {
         assert_eq!(ev.as_ref().map(|e| e.data.as_str()), Some("partial"));
     }
 }
+
+/// CRLF boundary coverage.
+///
+/// `feed()` checks `\n\n` before `\r\n\r\n`, which looks like it should mis-slice a CRLF
+/// stream — and does not. `\r\n\r\n` is CR,LF,CR,LF, so it contains no adjacent LF pair and
+/// `\n\n` never matches inside it; the CRLF arm is always the one taken. (A worker asserted
+/// the opposite, added a "fix", and these tests then passed against the *unfixed* code, which
+/// is what settled it.)
+///
+/// These exist so that reasoning is pinned rather than re-derived — and so a real change to
+/// the boundary logic cannot land without these being re-checked.
+#[test]
+fn parser_handles_crlf_boundaries() {
+    let mut p = servelet_sse::SseParser::new();
+    let evs = p.feed(b"data: one\r\n\r\ndata: two\r\n\r\n");
+    assert_eq!(evs.len(), 2, "both events should parse from a CRLF stream");
+    assert_eq!(evs[0].data, "one");
+    assert_eq!(evs[1].data, "two");
+}
+
+/// The same stream with named event and id fields — the case that would catch a stray `\r`
+/// leaking into a field name rather than being swallowed by a data value.
+#[test]
+fn parser_keeps_crlf_field_names_clean() {
+    let mut p = servelet_sse::SseParser::new();
+    let evs = p.feed(b"event: msg\r\nid: 3\r\ndata: hi\r\n\r\n");
+    assert_eq!(evs.len(), 1);
+    assert_eq!(evs[0].event.as_deref(), Some("msg"));
+    assert_eq!(evs[0].id.as_deref(), Some("3"));
+    assert_eq!(evs[0].data, "hi");
+}
+
+/// A CRLF boundary split across two chunks: the second feed lands mid-boundary, which is
+/// where an off-by-two would be worst.
+#[test]
+fn parser_handles_crlf_boundary_split_across_chunks() {
+    let mut p = servelet_sse::SseParser::new();
+    assert!(p.feed(b"data: hello\r").is_empty());
+    let evs = p.feed(b"\n\r\n");
+    assert_eq!(evs.len(), 1);
+    assert_eq!(evs[0].data, "hello");
+}
