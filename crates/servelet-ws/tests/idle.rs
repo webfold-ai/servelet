@@ -22,7 +22,7 @@ mod support;
 use std::time::Duration;
 
 use servelet_ws::{CLOSE_GOING_AWAY, WsLimits};
-use support::{next_report, spawn_ws_server, spawn_ws_server_echoing, spawn_ws_server_timed, RawWs};
+use support::{next_report, spawn_ws_server, spawn_ws_server_echoing, spawn_ws_server_timed, RawWs, MASK};
 use tokio::time::{timeout, Instant};
 
 /// Read frames until one arrives, failing the test if none does in time. Returns the opcode's
@@ -196,6 +196,52 @@ async fn a_slow_but_progressing_peer_is_not_pinged() {
         report, "message Text(\"xxxxxy\")",
         "the fragments reassembled, so no ping interrupted them: {report:?}"
     );
+}
+
+/// The same property, on a frame too big to arrive at once: a peer trickling a 2 KiB text frame
+/// out 64 bytes at a time, every 50ms, with a 150ms ping interval and a 400ms read timeout.
+///
+/// This is the case `read_n` got wrong. It wrapped `read_exact` in the timeout, so it measured
+/// "no COMPLETE 2050-byte read within 150ms" rather than "no BYTE within 150ms", and it dropped
+/// the read on every expiry -- discarding the bytes it had already taken off the socket, which
+/// desynchronised the frame stream. A peer legitimately uploading a frame must come out the
+/// other end byte-for-byte.
+#[tokio::test]
+async fn a_large_frame_trickled_out_is_neither_pinged_nor_corrupted() {
+    let (addr, mut rx) = spawn_ws_server_timed(
+        WsLimits::default(),
+        Some(Duration::from_millis(400)),
+        Some(Duration::from_millis(150)),
+    )
+    .await;
+    let mut ws = RawWs::connect(addr).await;
+
+    // 2 KiB of payload, so the length uses the 16-bit extended form and the read is many calls.
+    let payload: Vec<u8> = (0..2048u32).map(|i| b'a' + (i % 26) as u8).collect();
+    let mut frame = vec![0x81, 0x80 | 126];
+    frame.extend_from_slice(&(payload.len() as u16).to_be_bytes());
+    frame.extend_from_slice(&MASK);
+    frame.extend(payload.iter().enumerate().map(|(i, b)| b ^ MASK[i % 4]));
+    // ONE frame, its bytes trickled out in pieces -- not several frames.
+    for piece in frame.chunks(64) {
+        ws.send_raw(piece).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    let report = next_report(&mut rx).await.unwrap();
+    assert!(report.starts_with("message Text("), "the frame must reassemble, got: {report:?}");
+    assert!(
+        report.len() >= payload.len(),
+        "every byte must survive the trickled read: {} chars for {} bytes",
+        report.len(),
+        payload.len()
+    );
+    // A Ping immediately after the message is CORRECT -- the peer went silent, which is what
+    // the ping interval is for -- so the wire is not asserted quiet here. What matters is
+    // upstream of it: with the old cancelled-read_exact the bytes dropped on each 150ms expiry
+    // re-entered the stream as a bogus frame header, and this test fails against it -- the
+    // server never reports a message at all (checked out at ec0ed47~1: `next_report` times out
+    // and returns None). With fill_pending it reassembles.
 }
 
 /// The deadlines are per connection, like the size limits: a strict connection and a silent one

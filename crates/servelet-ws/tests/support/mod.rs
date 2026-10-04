@@ -221,6 +221,13 @@ impl RawWs {
         self.stream.write_all(&frame).await.unwrap();
     }
 
+    /// Send arbitrary pre-built bytes, for the one test that has to control WHERE the bytes of
+    /// a frame go on the wire rather than just what they say.
+    pub async fn send_raw(&mut self, bytes: &[u8]) {
+        self.stream.write_all(bytes).await.unwrap();
+        self.stream.flush().await.unwrap();
+    }
+
     /// Send ONLY a 64-bit-length frame header plus its mask key, and no payload at all.
     ///
     /// This is the whole point of the oversize test: the declared length is absurd, so sending a
