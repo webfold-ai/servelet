@@ -74,7 +74,7 @@ pub async fn accept_with_limits<S: AsyncRead + AsyncWrite + Unpin>(
         "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {accept_key}\r\n\r\n"
     );
     stream.write_all(response.as_bytes()).await.map_err(Error::Io)?;
-    Ok(WebSocket { stream, is_client: false, pending, limits })
+    Ok(WebSocket { stream, is_client: false, pending, limits, msg_buf: Vec::new(), msg_opcode: 0, msg_active: false })
 }
 
 /// splitmix64 — the crate's non-cryptographic clock-seeded randomness, verbatim from

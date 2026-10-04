@@ -2,7 +2,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use servelet_core::{Error, Result};
 
-use crate::limits::{WsLimits, CLOSE_TOO_BIG};
+use crate::limits::{WsLimits, CLOSE_INVALID_PAYLOAD, CLOSE_PROTOCOL_ERROR, CLOSE_TOO_BIG};
 
 /// A decoded WebSocket message.
 #[derive(Clone, Debug, PartialEq)]
@@ -41,6 +41,19 @@ pub struct WebSocket<S> {
     /// length, before the payload is read — see `limits.rs` for why that ordering is the whole
     /// point.
     pub(crate) limits: WsLimits,
+    /// Reassembly buffer for a fragmented message (RFC 6455 §5.4): a `TEXT`/`BINARY` frame with
+    /// FIN clear starts the message, `CONTINUATION` frames carry its middle, and the frame with
+    /// FIN set ends it. The moved `recv` had no such state and returned a continuation frame as
+    /// `Message::Binary`, which is why `docs/servelet-ws.md` listed RFC-compliant fragmentation as
+    /// "deliberately not done" — on a public port, a peer can now make this grow.
+    pub(crate) msg_buf: Vec<u8>,
+    /// The opcode of the message being reassembled — `OP_TEXT` or `OP_BINARY`. A continuation
+    /// carries no opcode of its own, so this is the only record of what the finished message is,
+    /// and it is what the UTF-8 check at the end has to consult.
+    pub(crate) msg_opcode: u8,
+    /// Whether a fragmented message is currently open. Distinguishes "the first continuation of
+    /// a message" from "a continuation with nothing to continue", which is a protocol error.
+    pub(crate) msg_active: bool,
 }
 
 impl<S: AsyncRead + AsyncWrite + Unpin> WebSocket<S> {
@@ -126,58 +139,187 @@ impl<S: AsyncRead + AsyncWrite + Unpin> WebSocket<S> {
 
     /// Read one frame and decode it into a `Message`. Automatically answers a peer `Ping` with a
     /// `Pong` (RFC 6455 §5.5.2 requires this) before returning it to the caller as `Message::Ping`.
+    ///
+    /// HARDENING (fragmentation, control frames, UTF-8): the moved version of this function
+    /// treated one frame as one message and handed a `CONTINUATION` frame back as
+    /// `Message::Binary`. Three things follow from that on a public port, and all three are
+    /// refusals here, each with its RFC 6455 close code on the wire:
+    ///
+    ///   * **Control frames must not be fragmented and must carry at most 125 bytes**
+    ///     (§5.5). A fragmented control frame or an oversized one is a `1002` protocol error.
+    ///     The 125-byte rule is what keeps a ping/pong usable while a huge data frame is in
+    ///     flight — without it, a peer could interleave an unbounded "control" frame.
+    ///   * **A message is capped in total, across all of its frames** (§5.4), not per frame. The
+    ///     per-frame ceiling bounds one `alloc`; this one bounds what reassembly accumulates,
+    ///     which is a peer sending a million 1-byte continuations.
+    ///   * **A `TEXT` message must be valid UTF-8** (§5.6). The moved code did check this, but on
+    ///     a single frame only; now it is checked on the ASSEMBLED message, which is the only
+    ///     place it can be checked correctly — a multi-byte character split across a fragment
+    ///     boundary is valid, and a per-frame check would refuse it.
+    ///
+    /// The loop, rather than a recursive call, is what lets a fragmented message keep reading
+    /// frames until it finds the FIN: `recv` still returns exactly one `Message` per call.
     pub async fn recv(&mut self) -> Result<Message> {
-        let header = self.read_n(2).await?;
-        let opcode = header[0] & 0x0F;
-        let masked = header[1] & 0x80 != 0;
-        let mut len = (header[1] & 0x7F) as u64;
+        loop {
+            let header = self.read_n(2).await?;
+            let fin = header[0] & 0x80 != 0;
+            let opcode = header[0] & 0x0F;
+            let masked = header[1] & 0x80 != 0;
+            let mut len = (header[1] & 0x7F) as u64;
 
-        if len == 126 {
-            let ext = self.read_n(2).await?;
-            len = u16::from_be_bytes([ext[0], ext[1]]) as u64;
-        } else if len == 127 {
-            let ext = self.read_n(8).await?;
-            len = u64::from_be_bytes(ext.try_into().unwrap());
+            if len == 126 {
+                let ext = self.read_n(2).await?;
+                len = u16::from_be_bytes([ext[0], ext[1]]) as u64;
+            } else if len == 127 {
+                let ext = self.read_n(8).await?;
+                len = u64::from_be_bytes(ext.try_into().unwrap());
+            }
+
+            // HARDENING (control frames, RFC 6455 §5.5): FIN must be set and the payload must
+            // fit in the 7-bit length field. Checked BEFORE the size guard below, because a
+            // control frame is never allowed to be big enough for the guard to be the right
+            // answer — an oversized ping is a protocol error (1002), not a too-big message
+            // (1009), and telling a peer the wrong thing sends it looking in the wrong place.
+            let is_control = opcode & 0x08 != 0;
+            if is_control && (!fin || len > 125) {
+                self.close_with_code(CLOSE_PROTOCOL_ERROR).await;
+                return Err(Error::Parse(format!(
+                    "control frame (opcode {opcode:#x}) must have FIN set and at most 125 bytes of payload, got FIN={fin} len={len}"
+                )));
+            }
+
+            // HARDENING: the declared length is checked HERE, before the mask key and before any
+            // payload byte is read, and before `read_n` can reach the `vec![0u8; n]` that this value
+            // used to go straight into. The moved code had no such check, so a ten-byte frame header
+            // claiming 2^63 bytes asked the process to allocate an exabyte — an abort on Linux, not
+            // an `Err`, and therefore not something a caller could survive. The two arms are one
+            // condition: on a 32-bit target `len` can also exceed `usize`, which would truncate.
+            if len > self.limits.max_frame_bytes || len > usize::MAX as u64 {
+                self.close_with_code(CLOSE_TOO_BIG).await;
+                return Err(Error::Http(format!(
+                    "inbound frame declares {len} bytes, which exceeds this connection's {} byte frame limit",
+                    self.limits.max_frame_bytes
+                )));
+            }
+
+            let mask_key = if masked {
+                let key = self.read_n(4).await?;
+                Some([key[0], key[1], key[2], key[3]])
+            } else {
+                None
+            };
+
+            let mut payload = self.read_n(len as usize).await?;
+            if let Some(key) = mask_key {
+                for (i, b) in payload.iter_mut().enumerate() {
+                    *b ^= key[i % 4];
+                }
+            }
+
+            // Control frames are answered here, in the middle of a fragmented message if that is
+            // where they arrived — which RFC 6455 §5.4 explicitly permits, and which is the whole
+            // reason control frames exist: a liveness check must not have to wait for a large
+            // message to finish.
+            if is_control {
+                return match opcode {
+                    OP_CLOSE => Ok(Message::Close),
+                    OP_PING => {
+                        self.write_frame(OP_PONG, &payload).await?;
+                        Ok(Message::Ping(payload))
+                    }
+                    OP_PONG => Ok(Message::Pong(payload)),
+                    other => {
+                        self.close_with_code(CLOSE_PROTOCOL_ERROR).await;
+                        Err(Error::Parse(format!("unknown control opcode {other}")))
+                    }
+                };
+            }
+
+            match opcode {
+                OP_TEXT | OP_BINARY => {
+                    // A data frame inside an open fragmented message ends it abnormally
+                    // (§5.4): there is no way to know where the peer thought the previous one
+                    // stopped, so the message boundaries are no longer trustworthy.
+                    if self.msg_active {
+                        self.close_with_code(CLOSE_PROTOCOL_ERROR).await;
+                        return Err(Error::Parse(format!(
+                            "a new {} frame arrived inside a fragmented message",
+                            if opcode == OP_TEXT { "text" } else { "binary" }
+                        )));
+                    }
+                    if payload.len() as u64 > self.limits.max_message_bytes {
+                        self.close_with_code(CLOSE_TOO_BIG).await;
+                        return Err(Error::Http(format!(
+                            "message of {} bytes exceeds this connection's {} byte message limit",
+                            payload.len(),
+                            self.limits.max_message_bytes
+                        )));
+                    }
+                    if !fin {
+                        self.msg_active = true;
+                        self.msg_opcode = opcode;
+                        self.msg_buf = payload;
+                        continue;
+                    }
+                    return self.finish_message(opcode, payload).await;
+                }
+                OP_CONTINUATION => {
+                    // A continuation with nothing to continue. The moved code returned this as
+                    // `Message::Binary`, which is how a peer could inject bytes into whatever the
+                    // application thought was the next message.
+                    if !self.msg_active {
+                        self.close_with_code(CLOSE_PROTOCOL_ERROR).await;
+                        return Err(Error::Parse(
+                            "continuation frame with no fragmented message in progress".to_string(),
+                        ));
+                    }
+                    let total = self.msg_buf.len() as u64 + payload.len() as u64;
+                    if total > self.limits.max_message_bytes {
+                        self.close_with_code(CLOSE_TOO_BIG).await;
+                        return Err(Error::Http(format!(
+                            "fragmented message of {total} bytes exceeds this connection's {} byte message limit",
+                            self.limits.max_message_bytes
+                        )));
+                    }
+                    let opcode = self.msg_opcode;
+                    self.msg_buf.extend_from_slice(&payload);
+                    if !fin {
+                        continue;
+                    }
+                    self.msg_active = false;
+                    let complete = std::mem::take(&mut self.msg_buf);
+                    return self.finish_message(opcode, complete).await;
+                }
+                other => {
+                    self.close_with_code(CLOSE_PROTOCOL_ERROR).await;
+                    return Err(Error::Parse(format!("unknown WebSocket opcode {other}")));
+                }
+            }
         }
+    }
 
-        // HARDENING: the declared length is checked HERE, before the mask key and before any
-        // payload byte is read, and before `read_n` can reach the `vec![0u8; n]` that this value
-        // used to go straight into. The moved code had no such check, so a ten-byte frame header
-        // claiming 2^63 bytes asked the process to allocate an exabyte — an abort on Linux, not
-        // an `Err`, and therefore not something a caller could survive. The two arms are one
-        // condition: on a 32-bit target `len` can also exceed `usize`, which would truncate.
-        if len > self.limits.max_frame_bytes || len > usize::MAX as u64 {
-            self.close_with_code(CLOSE_TOO_BIG).await;
-            return Err(Error::Http(format!(
-                "inbound frame declares {len} bytes, which exceeds this connection's {} byte frame limit",
-                self.limits.max_frame_bytes
-            )));
-        }
-
-        let mask_key = if masked {
-            let key = self.read_n(4).await?;
-            Some([key[0], key[1], key[2], key[3]])
+    /// Turn a fully assembled message into a `Message`, refusing a `TEXT` one that is not valid
+    /// UTF-8 with close code 1007 (RFC 6455 §7.4.1).
+    ///
+    /// Called with the WHOLE message, never per frame: a multi-byte UTF-8 character split across
+    /// a fragment boundary is perfectly legal, and neither half is valid on its own.
+    async fn finish_message(&mut self, opcode: u8, payload: Vec<u8>) -> Result<Message> {
+        if opcode == OP_TEXT {
+            match String::from_utf8(payload) {
+                Ok(text) => Ok(Message::Text(text)),
+                Err(e) => {
+                    self.close_with_code(CLOSE_INVALID_PAYLOAD).await;
+                    // The error names the position and nothing else about the bytes: a text frame
+                    // is application data, and an error message that echoes it back is a way to
+                    // get untrusted bytes into a log line.
+                    Err(Error::Parse(format!(
+                        "text message is not valid UTF-8 (bad byte at offset {})",
+                        e.utf8_error().valid_up_to()
+                    )))
+                }
+            }
         } else {
-            None
-        };
-
-        let mut payload = self.read_n(len as usize).await?;
-        if let Some(key) = mask_key {
-            for (i, b) in payload.iter_mut().enumerate() {
-                *b ^= key[i % 4];
-            }
-        }
-
-        match opcode {
-            OP_TEXT => Ok(Message::Text(String::from_utf8(payload).map_err(|e| Error::Parse(e.to_string()))?)),
-            OP_BINARY | OP_CONTINUATION => Ok(Message::Binary(payload)),
-            OP_CLOSE => Ok(Message::Close),
-            OP_PING => {
-                self.write_frame(OP_PONG, &payload).await?;
-                Ok(Message::Ping(payload))
-            }
-            OP_PONG => Ok(Message::Pong(payload)),
-            other => Err(Error::Parse(format!("unknown WebSocket opcode {other}"))),
+            Ok(Message::Binary(payload))
         }
     }
 }
