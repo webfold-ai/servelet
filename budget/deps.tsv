@@ -6,7 +6,8 @@ servelet-tls	56
 servelet-cookie	1
 servelet-sse	48
 servelet-uri	1
-servelet-client	36
+# 36 of servelet-client's 46 are RUNTIME deps (default features, TLS stays behind the off-by-default tls feature). The other 10 are the dev-dependencies tests/socket.rs needs to drive the client against a live servelet server: servelet-router and servelet-h1. Nothing in servelet-client/src/ names either.
+servelet-client	46
 # 38 of servelet-ws's 48 are RUNTIME deps. The other 10 are the dev-dependencies
 # tests/upgrade.rs needs to drive the real path -- servelet-h1, servelet-router, tokio's
 # rt-multi-thread/time -- so the upgrade is tested through a real socket and a real auth layer

@@ -647,57 +647,6 @@ pub fn host_port(uri: &Uri) -> Result<(String, u16)> {
 }
 
 
-/// Encode a string as a URL component (RFC 3986 unreserved characters kept, everything else
-/// `%XX`). The inverse of a percent-decode, for building URLs with query parameters.
-///
-/// Moved here from `biota/http-server`'s `helpers::percent_encode` when the HTTP kernel was
-/// split out into `servelet`. It belongs beside [`parse_uri`] rather than in a helpers
-/// module: URI construction and URI escaping are one concern, and four search engines in
-/// `ptyktos-api` each used to carry their own byte-identical copy of this function.
-pub fn percent_encode(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for &b in s.as_bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(b as char)
-            }
-            _ => {
-                out.push('%');
-                out.push_str(&format!("{b:02X}"));
-            }
-        }
-    }
-    out
-}
-
-#[cfg(test)]
-mod percent_encode_tests {
-    use super::percent_encode;
-
-    #[test]
-    fn leaves_unreserved_alone() {
-        assert_eq!(percent_encode("abcXYZ019-_.~"), "abcXYZ019-_.~");
-    }
-
-    #[test]
-    fn encodes_reserved_and_unsafe() {
-        assert_eq!(percent_encode("a b"), "a%20b");
-        assert_eq!(percent_encode("q=1&r=2"), "q%3D1%26r%3D2");
-        assert_eq!(percent_encode("a/b"), "a%2Fb");
-    }
-
-    #[test]
-    fn encodes_multibyte_utf8_per_byte() {
-        // "é" is 0xC3 0xA9 — percent-encoding is defined over bytes, not chars.
-        assert_eq!(percent_encode("é"), "%C3%A9");
-    }
-
-    #[test]
-    fn empty_stays_empty() {
-        assert_eq!(percent_encode(""), "");
-    }
-}
-
 /// Whether a response/connection asks to be closed rather than kept alive — the `Connection:
 /// close` token, matched case-insensitively per RFC 9110 §7.6.1.
 ///
