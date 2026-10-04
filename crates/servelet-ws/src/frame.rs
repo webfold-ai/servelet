@@ -113,24 +113,44 @@ impl<S: AsyncRead + AsyncWrite + Unpin> WebSocket<S> {
     ///   * if the read timeout as a whole elapses with nothing arriving, close with 1001 and
     ///     report why.
     ///
+    /// "Nothing has arrived" means no BYTE has arrived since the last one — see
+    /// [`Self::fill_pending`] — so a peer in the middle of a slow frame counts as present.
+    ///
     /// With neither configured this is exactly the moved behaviour, one extra branch.
+    ///
+    /// The deadline is on PROGRESS, not on completing the read: `fill_pending` appends whatever
+    /// arrives to `self.pending` and the clock restarts every time a byte lands. Two things fall
+    /// out of that, and the earlier version got both wrong:
+    ///
+    ///   * a peer trickling a LARGE frame is not pinged or dropped while it is still arriving,
+    ///     because it is still making progress (a deadline that measured "no complete read of n
+    ///     bytes" pinged every legitimately slow upload);
+    ///   * cancelling a read loses NOTHING. Wrapping `read_exact` in a timeout drops the future,
+    ///     and `read_exact` had already consumed those bytes off the socket into a local buffer
+    ///     that dies with it — so a cancelled read desynchronised the frame stream and the
+    ///     server went on to parse the middle of a frame as if it were a header.
     async fn read_n(&mut self, n: usize) -> Result<Vec<u8>> {
         let Some(idle) = self.idle_timeout else {
             return self.read_n_raw(n).await;
         };
         let keepalive = self.ping_interval.filter(|p| *p < idle);
         loop {
-            let first = match keepalive {
+            let window = match keepalive {
                 Some(p) => p,
                 None => idle,
             };
             // Bound to a local so the mutable borrow of `self` ends before the timeout arm can
             // call back into `self` to write a Ping or a Close.
-            let outcome = tokio::time::timeout(first, self.read_n_raw(n)).await;
+            let outcome = tokio::time::timeout(window, self.fill_pending(n)).await;
             match outcome {
-                Ok(result) => return result,
+                Ok(result) => {
+                    result?;
+                    break;
+                }
                 Err(_) => {
-                    if let Some(p) = keepalive {
+                    // No byte arrived for the whole window. Whatever did arrive is still in
+                    // `pending`, so the next round resumes exactly where this one stopped.
+                    if let Some(_p) = keepalive {
                         let _ = self.write_frame(OP_PING, &[]).await;
                         continue;
                     }
@@ -141,21 +161,38 @@ impl<S: AsyncRead + AsyncWrite + Unpin> WebSocket<S> {
                 }
             }
         }
+        Ok(self.pending.drain(..n).collect())
+    }
+
+    /// Read exactly `n` bytes — from `pending` first, then the socket for the rest.
+    ///
+    /// Reads at most the number of bytes still missing, so it never pulls a byte of the NEXT
+    /// frame off the socket, and a zero-length read is end-of-stream rather than a silent stall.
+    async fn fill_pending(&mut self, n: usize) -> Result<()> {
+        let mut chunk = [0u8; 4096];
+        while self.pending.len() < n {
+            let want = (n - self.pending.len()).min(chunk.len());
+            let read = self
+                .stream
+                .read(&mut chunk[..want])
+                .await
+                .map_err(Error::Io)?;
+            if read == 0 {
+                return Err(Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "the peer closed the connection mid-frame",
+                )));
+            }
+            self.pending.extend_from_slice(&chunk[..read]);
+        }
+        Ok(())
     }
 
     /// Read exactly `n` bytes — from `pending` first, then the socket for the rest. The moved
     /// body, unchanged; [`Self::read_n`] is the version with the deadline.
     async fn read_n_raw(&mut self, n: usize) -> Result<Vec<u8>> {
-        let mut out = vec![0u8; n];
-        let from_pending = self.pending.len().min(n);
-        if from_pending > 0 {
-            out[..from_pending].copy_from_slice(&self.pending[..from_pending]);
-            self.pending.drain(..from_pending);
-        }
-        if from_pending < n {
-            self.stream.read_exact(&mut out[from_pending..]).await.map_err(Error::Io)?;
-        }
-        Ok(out)
+        self.fill_pending(n).await?;
+        Ok(self.pending.drain(..n).collect())
     }
 
     async fn write_frame(&mut self, opcode: u8, payload: &[u8]) -> Result<()> {
