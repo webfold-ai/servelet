@@ -4,6 +4,7 @@ members = [
     "crates/servelet-client",
     "crates/servelet-cookie",
     "crates/servelet-core",
+    "crates/servelet-h2",
     "crates/servelet-router",
     "crates/servelet-h1",
     "crates/servelet-sse",

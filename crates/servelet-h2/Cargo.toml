@@ -14,4 +14,4 @@ publish = false
 # AsyncWriteExt, `macros` and `rt` for the `#[tokio::test]`s in the moved test module.
 servelet-core = { path = "../servelet-core" }
 servelet-router = { path = "../servelet-router" }
-tokio = { workspace = true, features = ["io-util", "net", "macros", "rt"] }
+tokio = { workspace = true, features = ["io-util", "net", "macros", "rt", "time"] }

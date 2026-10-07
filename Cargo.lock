@@ -332,6 +332,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "servelet-h2"
+version = "0.1.0"
+dependencies = [
+ "servelet-core",
+ "servelet-router",
+ "tokio",
+]
+
+[[package]]
 name = "servelet-router"
 version = "0.1.0"
 dependencies = [

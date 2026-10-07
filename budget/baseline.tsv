@@ -1,7 +1,7 @@
 crate	lines	max_file	note
 servelet-client	1385	636	-
 servelet-cookie	298	298	-
-servelet-h2	951	951	initial extraction from biota/http-server at rev 4ce2dcd: lib.rs lines 2931-3822 (h2) + 3824-3880 (h2_huffman_table), byte-for-byte, in one file (the source had both modules in lib.rs)
+servelet-h2	990	990	initial extraction (951) raised by the adaptation: crate:: -> servelet_core:: / servelet_router:: (3 lines), tokio::time added to Cargo.toml for the moved test, and a new top-level `pub async fn serve<A: ToSocketAddrs>(addr, router) -> std::io::Result<()>` (~36 lines, including the h2c-preface sniff that the biota `serve` used to do before dispatching to `serve_h2c_connection`). The doc comment on `serve` carries the SPINE.md:86 seam argument: servelet-h1 does not depend on servelet-h2, and a same-port dispatcher is the application author's, not a crate's.
 servelet-core	1254	684	raised by the merge with origin/main (pi-agent 8b7150a): connection_close is hoisted into core (+36 lines with its tests), replacing three byte-identical private copies in biota http-server, servelet-h1 wire.rs and servelet-client send.rs; net across the repo the lines FELL. The duplicate core percent_encode (+51) was NOT kept: servelet-uri is its one home.
 servelet-h1	989	523	raised by the upgrade seam: src/upgrade.rs (123) + 15 dispatch lines in wire.rs + 9 in lib.rs; see docs/EXTENSIONS.md section 7. Raised again by the hardening unit, which had not recorded its own lines: src/limits.rs (86, the five RequestLimits ceilings), the bounded read_line_limited replacing read_until, the checked Content-Length/chunked-size allocations, and the CRLF-only header framing in wire.rs.
 servelet-router	414	372	-

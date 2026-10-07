@@ -42,7 +42,8 @@ pub mod h2 {
     //! client needs h2 transport before its gRPC bytes are ever read. That transport now genuinely
     //! exists — a client sending the h2c preface reaches the same `Router` the HTTP/1.1 path serves.
 
-    use crate::{Error, HeaderMap, HeaderName, HeaderValue, Method, Request, Response, Result, Router, StatusCode, Uri, Version};
+    use servelet_core::{Error, HeaderMap, HeaderName, HeaderValue, Method, Request, Response, Result, StatusCode, Uri, Version};
+    use servelet_router::Router;
     use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
     /// The exact 24-byte connection preface every h2c client sends first (RFC 7540 §3.5).
@@ -668,7 +669,7 @@ pub mod h2 {
     #[cfg(test)]
     mod tests {
         use super::*;
-        use crate::Response as HttpResponse;
+        use servelet_core::Response as HttpResponse;
 
         #[test]
         fn integer_encode_decode_round_trips_across_the_prefix_boundary() {
@@ -844,11 +845,11 @@ pub mod h2 {
         #[tokio::test]
         async fn h2c_multiplexes_concurrent_streams_on_one_connection() {
             let router = Router::new()
-                .route(crate::Method::GET, "/slow", |_req: Request| async move {
+                .route(Method::GET, "/slow", |_req: Request| async move {
                     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
                     HttpResponse::ok("slow-done").with_header("content-type", "application/grpc+proto").with_header("grpc-status", "0")
                 })
-                .route(crate::Method::GET, "/fast", |_req: Request| async move {
+                .route(Method::GET, "/fast", |_req: Request| async move {
                     HttpResponse::ok("fast-done").with_header("content-type", "application/grpc+proto").with_header("grpc-status", "0")
                 });
             let addr = "127.0.0.1:19293";
@@ -949,3 +950,41 @@ pub mod h2_huffman_table {
     ];
 }
 
+
+// The h2c-only equivalent of `biota::serve`: bind the address, accept every connection, sniff the
+// 24-byte h2c preface, and hand the post-preface stream to `h2::serve_h2c_connection` -- this is
+// the documented seam with `servelet-h1`.
+//
+// SPINE.md:86 names the h2c-preface sniff that used to live at the top of `servelet-h1`'s
+// `serve_connection` as `servelet-h2`'s to reinstate. The same document records that the move is
+// only honest if `servelet-h1` does not depend on `servelet-h2`, because every h1 wire-form then
+// loads the h2 module. That constraint is preserved here by NOT putting the sniff inside h1: a
+// caller that wants both h1 and h2c on one port must write the one-line dispatcher themselves
+// (read 24 bytes off the accepted stream; PREFACE -> h2, otherwise -> h1's serve_connection), or
+// pick a port and a serve function per protocol. The two crates' `serve` functions are
+// alternatives, not stacked.
+pub async fn serve<A>(addr: A, router: servelet_router::Router) -> std::io::Result<()>
+where
+    A: tokio::net::ToSocketAddrs,
+{
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    loop {
+        let (mut stream, _peer) = listener.accept().await?;
+        let router = router.clone();
+        tokio::spawn(async move {
+            // RFC 7540 §3.5: every h2c client sends the 24-byte preface FIRST; a peer that doesn't
+            // is not h2 and we close the connection. `serve_h2c_connection` documents that the
+            // preface is the caller's responsibility -- the biota `serve` (kernel.rs:2926) used to
+            // consume it before dispatching; we re-create the same boundary here.
+            use tokio::io::AsyncReadExt;
+            let mut preface = [0u8; 24];
+            if stream.read_exact(&mut preface).await.is_err() {
+                return;
+            }
+            if &preface[..] != h2::PREFACE {
+                return;
+            }
+            h2::serve_h2c_connection(stream, router).await;
+        });
+    }
+}
