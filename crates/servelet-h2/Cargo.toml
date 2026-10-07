@@ -1,0 +1,17 @@
+[package]
+name = "servelet-h2"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "HTTP/2 (h2c) framing and HPACK, plus the 5-byte gRPC message prefix and grpc-status/grpc-message trailers."
+publish = false
+
+[dependencies]
+# Workspace-local types only at this point. servelet-core provides Error/Result, Method,
+# Request/Response, StatusCode, Version, HeaderMap/HeaderName/HeaderValue, Uri. servelet-router
+# provides the Router that serve_h2c dispatches into. tokio is the I/O substrate the moved
+# `serve_h2c_connection` and the frame reader/writer use -- `io-util` for AsyncReadExt/
+# AsyncWriteExt, `macros` and `rt` for the `#[tokio::test]`s in the moved test module.
+servelet-core = { path = "../servelet-core" }
+servelet-router = { path = "../servelet-router" }
+tokio = { workspace = true, features = ["io-util", "net", "macros", "rt"] }
