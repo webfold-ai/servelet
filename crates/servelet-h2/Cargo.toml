@@ -15,3 +15,7 @@ publish = false
 servelet-core = { path = "../servelet-core" }
 servelet-router = { path = "../servelet-router" }
 tokio = { workspace = true, features = ["io-util", "net", "macros", "rt", "time"] }
+
+[[test]]
+name = "dbg"
+path = "tests/dbg.rs"

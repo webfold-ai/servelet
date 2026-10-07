@@ -69,7 +69,12 @@ pub mod h2 {
     }
 
     impl FrameType {
-        fn from_u8(b: u8) -> Self {
+        /// Decode a wire byte to a `FrameType`. `pub` because the integration tests
+        /// in `tests/grpc_unary.rs` build frames by hand and need to assert against the
+        /// decoded value; the biota code had this private and the integration test there
+        /// used `FrameType::Settings` etc. by name, never by byte, which is a missed
+        /// property the byte-level test now covers.
+        pub fn from_byte(b: u8) -> Self {
             match b {
                 0x0 => FrameType::Data,
                 0x1 => FrameType::Headers,
@@ -136,7 +141,7 @@ pub mod h2 {
         let mut hdr = [0u8; 9];
         r.read_exact(&mut hdr).await?;
         let len = u32::from_be_bytes([0, hdr[0], hdr[1], hdr[2]]) as usize;
-        let frame_type = FrameType::from_u8(hdr[3]);
+        let frame_type = FrameType::from_byte(hdr[3]);
         let flags = hdr[4];
         let stream_id = u32::from_be_bytes([hdr[5], hdr[6], hdr[7], hdr[8]]) & 0x7fff_ffff;
         let mut payload = vec![0u8; len];
@@ -950,6 +955,30 @@ pub mod h2_huffman_table {
     ];
 }
 
+
+// The gRPC layer: 5-byte message prefix codec, gRPC header constants, and a `Router::layer`
+// that wraps one handler with the prefix in/out + `grpc-status: 0` trailer convention. See
+// `grpc.rs` and `grpc_unary.rs`.
+pub mod grpc;
+pub mod grpc_unary;
+pub use grpc::{
+    decode_message_header, encode_message_header, grpc_content_type, grpc_content_type_grpc,
+    grpc_content_type_grpc_proto, grpc_message, grpc_status, grpc_te, grpc_te_trailers_value,
+    grpc_trailer_headers, response_headers, unwrap_request_body, wrap_response_body,
+    GRPC_COMPRESSED_FALSE, GRPC_STATUS_OK,
+};
+pub use grpc_unary::{grpc_unary, grpc_unary_layer};
+
+// Re-export the h2 transport's public surface at the crate root so a consumer does not
+// need to know that the frame layer lives in `pub mod h2`. The h2 module's `HField`,
+// `Frame`, `FrameType`, `FLAG_*` consts, `DynamicTable`, `hpack_encode`, `hpack_decode`,
+// `serve_h2c_connection`, and the test-side `PREFACE` are all reachable directly. The
+// huffman table (`pub mod h2_huffman_table`) is not re-exported -- it is crate-private
+// to the h2 module's encoder/decoder and is not a public API.
+pub use h2::{
+    hpack_decode, hpack_encode, serve_h2c_connection, DynamicTable, Frame, FrameType, HField,
+    FLAG_ACK, FLAG_END_HEADERS, FLAG_END_STREAM, PREFACE,
+};
 
 // The h2c-only equivalent of `biota::serve`: bind the address, accept every connection, sniff the
 // 24-byte h2c preface, and hand the post-preface stream to `h2::serve_h2c_connection` -- this is
