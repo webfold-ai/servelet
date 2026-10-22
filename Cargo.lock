@@ -81,7 +81,7 @@ dependencies = [
 [[package]]
 name = "hashtrinity"
 version = "0.1.0"
-source = "git+https://github.com/Ptyktos/hashtrinity?rev=2c36b995c82c073c71df7c28b14c62665d62cbf0#2c36b995c82c073c71df7c28b14c62665d62cbf0"
+source = "git+https://github.com/Ptyktos/hashtrinity?rev=8de00eff38d3ffa5393190c2358a9e54dac5bc2f#8de00eff38d3ffa5393190c2358a9e54dac5bc2f"
 dependencies = [
  "apeiron",
  "hashtrinity_derive",
@@ -93,7 +93,7 @@ dependencies = [
 [[package]]
 name = "hashtrinity_derive"
 version = "0.1.0"
-source = "git+https://github.com/Ptyktos/hashtrinity?rev=2c36b995c82c073c71df7c28b14c62665d62cbf0#2c36b995c82c073c71df7c28b14c62665d62cbf0"
+source = "git+https://github.com/Ptyktos/hashtrinity?rev=8de00eff38d3ffa5393190c2358a9e54dac5bc2f#8de00eff38d3ffa5393190c2358a9e54dac5bc2f"
 
 [[package]]
 name = "itoa"

@@ -125,7 +125,7 @@ would be a rewrite, which rule 9 forbids in the same commit as the move.
 
 The other three crates take the **minimum** they need — `servelet-h1` does not pull
 `hashtrinity`, and neither `servelet-h1` nor `servelet-tls` pulls `serde`/`serde_json`/`bytes`/
-`base64`. `hashtrinity` is the GitHub URL pinned at rev `2c36b99`, the same form every other Ptyktos crate
+`base64`. `hashtrinity` is the GitHub URL pinned at rev `8de00ef`, the same form every other Ptyktos crate
 in the platform uses (it was the GitLab mirror on `branch = "main"`, unreachable from builders).
 
 ---
