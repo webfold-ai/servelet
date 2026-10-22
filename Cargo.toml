@@ -19,9 +19,13 @@ license = "MIT"
 publish = false
 
 [workspace.dependencies]
-# One hashtrinity for every crate. Hard rule 5: the GitLab mirror, branch `main`, exactly as
-# nexus/Cargo.toml has it — the GitHub copy does not unify with sangdb (proven there).
-hashtrinity = { git = "https://gitlab.tas.twn.network/twn/ptyktos/hashtrinity.git", branch = "main", features = ["codec", "validate", "error", "derive"] }
+# One hashtrinity for every crate, and the SAME one every other Ptyktos crate in the platform
+# uses: this GitHub URL at this rev (transport, relayfold, kleis, hosting-runtime pin exactly
+# this form). Cargo treats a different URL, rev or branch as a different package, so two forms in
+# one graph make `hashtrinity::Table` two incompatible types. This was the self-hosted GitLab
+# mirror on `branch = "main"`: unreachable from builders and a moving target. A branch is never a
+# pin; the rev is.
+hashtrinity = { git = "https://github.com/Ptyktos/hashtrinity", rev = "2c36b995c82c073c71df7c28b14c62665d62cbf0", features = ["codec", "validate", "error", "derive"] }
 
 # Shared, minimal tokio. `default-features = false` everywhere so no crate inherits a feature
 # (the `full` blowup, or `rt-multi-thread`) it does not name itself.

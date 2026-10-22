@@ -3,6 +3,11 @@
 version = 4
 
 [[package]]
+name = "apeiron"
+version = "0.1.0"
+source = "git+https://github.com/Ptyktos/apeiron.git?rev=a2b50938679888cba22e5174e8dce92dfb6414cc#a2b50938679888cba22e5174e8dce92dfb6414cc"
+
+[[package]]
 name = "bitflags"
 version = "2.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -76,8 +81,9 @@ dependencies = [
 [[package]]
 name = "hashtrinity"
 version = "0.1.0"
-source = "git+https://gitlab.tas.twn.network/twn/ptyktos/hashtrinity.git?branch=main#86f148e4e160447c5bae92760f7bd4e95bbfc494"
+source = "git+https://github.com/Ptyktos/hashtrinity?rev=2c36b995c82c073c71df7c28b14c62665d62cbf0#2c36b995c82c073c71df7c28b14c62665d62cbf0"
 dependencies = [
+ "apeiron",
  "hashtrinity_derive",
  "rustls",
  "serde",
@@ -87,7 +93,7 @@ dependencies = [
 [[package]]
 name = "hashtrinity_derive"
 version = "0.1.0"
-source = "git+https://gitlab.tas.twn.network/twn/ptyktos/hashtrinity.git?branch=main#86f148e4e160447c5bae92760f7bd4e95bbfc494"
+source = "git+https://github.com/Ptyktos/hashtrinity?rev=2c36b995c82c073c71df7c28b14c62665d62cbf0#2c36b995c82c073c71df7c28b14c62665d62cbf0"
 
 [[package]]
 name = "itoa"
@@ -651,11 +657,3 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
-
-[[patch.unused]]
-name = "guardfold"
-version = "0.1.0"
-
-[[patch.unused]]
-name = "modelfold"
-version = "0.1.0"
