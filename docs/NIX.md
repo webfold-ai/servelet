@@ -21,7 +21,7 @@ All nine crates. The source is assembled by the flake (`nix build .#servelet-tre
 `Cargo.toml` plus `exclude = ["vendor"]` and a `[patch."https://github.com/Ptyktos/hashtrinity"]` section, and
 the pinned `hashtrinity` input vendored under `vendor/`. hashtrinity is a path dependency in the build on
 purpose: its `hashtrinity_derive` reads `../../src/proc_masq.rs`, outside its own package, which Crane's
-per-package git vendoring cannot provide. The rev is unchanged (`8de00ef`, the one `Cargo.toml` names).
+per-package git vendoring cannot provide. The rev is the one `Cargo.toml` names (`92a8863`, which moved from `8de00ef` only to take apeiron `255ca30`).
 
 `nix/Cargo.lock` is the committed `Cargo.lock` with that one source changed (hashtrinity: git -> path), every
 other locked version unchanged. `nix/gen-lock.sh` syncs it, `--check` verifies it, `--update` re-resolves.
@@ -51,8 +51,8 @@ substituters (see `hosting-runtime/nix/README.md`). `sandbox-fallback` defaults 
   in for the URL, then restores the real URL (what `hosting-runtime/nix/scripts/pin-input.sh` does for one
   input; for several, run one `nix flake lock --override-input a git+file://... --override-input b
   git+file://...` and set `.nodes.<input>.locked.url` back with `jq`). The tree reaches builders through the
-  signed binary cache by `narHash`. Expected apeiron `narHash` at `a2b5093`:
-  `sha256-G+JFSyUH51XTRxG7+U20AVOz/X+FAgEJDx975RgiRck=`.
+  signed binary cache by `narHash`. Expected apeiron `narHash` at `255ca30`:
+  `sha256-ABYuC2cGsd/4lrogqKsRc2u2RUyJps5toPVj4HfoKRk=`.
 
 ## Status (exercised 2026-10-23, cold start, Nix 2.34.6, `sandbox-fallback = false`, x86_64-linux)
 
@@ -64,7 +64,7 @@ substituters (see `hosting-runtime/nix/README.md`). `sandbox-fallback` defaults 
 | gate `doc` (`--deny warnings`) | pass (293 `missing_docs` warnings are not errors) |
 | gate `fmt` (members only) | **fail**: 335 hunks in 48 files; the repository has no CI that enforces it |
 | gate `clippy` (`--all-targets --no-deps -D warnings`, rustc 1.99.0) | **fail** at `servelet-core` (1 finding: manual char comparison); Clippy stops at the first failing crate, so later crates are not yet linted |
-| gate `deny` (shared policy) | **fail** on one item: `apeiron@a2b5093` ships a GPL-3.0 `LICENSE` file (known; hosting-runtime's `deny.toml` carries a temporary exception). Bans and sources pass |
+| gate `deny` (shared policy) | pass (re-run 2026-10-23 at apeiron `255ca30`): bans ok, licenses ok, sources ok. It failed on one item before: `apeiron@a2b5093` shipped a GPL-3.0 `LICENSE` file and no SPDX field; `255ca30` carries the Apache-2.0 text and `license = "Apache-2.0"` |
 | gate `audit` | **fail**: 5 vulnerabilities in the locked TLS stack: `rustls` 0.23.45 (RUSTSEC-2026-0346, -0347, -0348, -0349; fixed in 0.23.46) and `rustls-webpki` 0.103.15 (RUSTSEC-2026-0382; fixed in 0.103.16). They are in the committed `Cargo.lock` too; `cargo update -p rustls -p rustls-webpki` is the fix (a dependency change, not made here) |
 
 No gate was weakened. Every failure is in the code or its locked dependencies, not in the build layer.

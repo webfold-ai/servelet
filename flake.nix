@@ -17,8 +17,8 @@
     # hashtrinity is vendored as a path dependency (see below); apeiron is its git dependency and is
     # not fetchable from a builder: it is put in the store from a trusted checkout at this rev
     # (docs/NIX.md, "Private inputs").
-    hashtrinity = { url = "git+https://github.com/Ptyktos/hashtrinity?rev=8de00eff38d3ffa5393190c2358a9e54dac5bc2f&shallow=1"; flake = false; };
-    apeiron = { url = "git+https://github.com/Ptyktos/apeiron?rev=a2b50938679888cba22e5174e8dce92dfb6414cc&shallow=1"; flake = false; };
+    hashtrinity = { url = "git+https://github.com/Ptyktos/hashtrinity?rev=92a88636ab0e59ffe366ace07c019cd1f35a0bfa&shallow=1"; flake = false; };
+    apeiron = { url = "git+https://github.com/Ptyktos/apeiron?rev=255ca3018a0f06300153d905cb19b37ea548bb56&shallow=1"; flake = false; };
   };
 
   outputs =
@@ -40,7 +40,7 @@
         "servelet-ws"
       ];
 
-      # hashtrinity (git, rev 8de00ef) is built from the vendored input as a path dependency via
+      # hashtrinity (git, rev 92a8863) is built from the vendored input as a path dependency via
       # [patch]: its `hashtrinity_derive` reads `../../src/proc_masq.rs`, outside its own package,
       # which Crane's per-package git vendoring cannot provide. `exclude` keeps cargo from adopting
       # the vendored tree as workspace members. Everything else in Cargo.toml is verbatim.

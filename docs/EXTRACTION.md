@@ -290,7 +290,7 @@ sed 's://.*::' <span> | grep -oE '\b(tokio|rustls|rustls_pki_types|rustls_native
 | cut: `x402` | `lib.rs` 4716-5310 | would need `serde` (22), `serde_json` (9), `bytes` (14), `base64` (12), `url`(0 real), `hashtrinity` (2), `tokio` (0) | the heaviest cut; rule 4 keeps it out |
 | cut: `nel` / `graphql` / `filter` / masqs | `lib.rs` 4154-4715 / 5311-5613 / 6591-7204 / 6292-6590 | `nel`: `url`(0), `tokio` (5), `hashtrinity` (1); `graphql`: `sangdb` (1), `hashtrinity` (2); `filter`+masqs: **none** | all zero-caller |
 
-`hashtrinity` is pinned to the GitHub URL at rev `8de00ef`, the one form transport, relayfold, kleis
+`hashtrinity` is pinned to the GitHub URL at rev `92a8863`, the one form transport, relayfold, kleis
 and hosting-runtime use, so the graph has one hashtrinity (it was the GitLab mirror on `branch =
 "main"`; that URL is unreachable from builders and a branch is not a pin).
 

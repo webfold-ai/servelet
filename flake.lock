@@ -20,16 +20,16 @@
     "apeiron": {
       "flake": false,
       "locked": {
-        "lastModified": 1790522142,
-        "narHash": "sha256-G+JFSyUH51XTRxG7+U20AVOz/X+FAgEJDx975RgiRck=",
-        "ref": "master",
-        "rev": "a2b50938679888cba22e5174e8dce92dfb6414cc",
+        "lastModified": 1792631491,
+        "narHash": "sha256-ABYuC2cGsd/4lrogqKsRc2u2RUyJps5toPVj4HfoKRk=",
+        "ref": "refs/heads/apeiron",
+        "rev": "255ca3018a0f06300153d905cb19b37ea548bb56",
         "shallow": true,
         "type": "git",
         "url": "https://github.com/Ptyktos/apeiron"
       },
       "original": {
-        "rev": "a2b50938679888cba22e5174e8dce92dfb6414cc",
+        "rev": "255ca3018a0f06300153d905cb19b37ea548bb56",
         "shallow": true,
         "type": "git",
         "url": "https://github.com/Ptyktos/apeiron"
@@ -72,16 +72,16 @@
     "hashtrinity": {
       "flake": false,
       "locked": {
-        "lastModified": 1792630065,
-        "narHash": "sha256-/eZoN+knpUp3UlBDSH821xuQweZJCGGft/yLcf9sWh4=",
+        "lastModified": 1792734336,
+        "narHash": "sha256-9BzTgVHQ5qEO4c3qYOkZD2RnmbWgfnp4aDApjBEUg28=",
         "ref": "refs/heads/main",
-        "rev": "8de00eff38d3ffa5393190c2358a9e54dac5bc2f",
+        "rev": "92a88636ab0e59ffe366ace07c019cd1f35a0bfa",
         "shallow": true,
         "type": "git",
         "url": "https://github.com/Ptyktos/hashtrinity"
       },
       "original": {
-        "rev": "8de00eff38d3ffa5393190c2358a9e54dac5bc2f",
+        "rev": "92a88636ab0e59ffe366ace07c019cd1f35a0bfa",
         "shallow": true,
         "type": "git",
         "url": "https://github.com/Ptyktos/hashtrinity"
