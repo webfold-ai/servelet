@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "apeiron"
 version = "0.1.0"
-source = "git+https://github.com/Ptyktos/apeiron.git?rev=a2b50938679888cba22e5174e8dce92dfb6414cc#a2b50938679888cba22e5174e8dce92dfb6414cc"
+source = "git+https://github.com/Ptyktos/apeiron.git?rev=255ca3018a0f06300153d905cb19b37ea548bb56#255ca3018a0f06300153d905cb19b37ea548bb56"
 
 [[package]]
 name = "bitflags"
@@ -81,7 +81,7 @@ dependencies = [
 [[package]]
 name = "hashtrinity"
 version = "0.1.0"
-source = "git+https://github.com/Ptyktos/hashtrinity?rev=8de00eff38d3ffa5393190c2358a9e54dac5bc2f#8de00eff38d3ffa5393190c2358a9e54dac5bc2f"
+source = "git+https://github.com/Ptyktos/hashtrinity?rev=92a88636ab0e59ffe366ace07c019cd1f35a0bfa#92a88636ab0e59ffe366ace07c019cd1f35a0bfa"
 dependencies = [
  "apeiron",
  "hashtrinity_derive",
@@ -93,7 +93,7 @@ dependencies = [
 [[package]]
 name = "hashtrinity_derive"
 version = "0.1.0"
-source = "git+https://github.com/Ptyktos/hashtrinity?rev=8de00eff38d3ffa5393190c2358a9e54dac5bc2f#8de00eff38d3ffa5393190c2358a9e54dac5bc2f"
+source = "git+https://github.com/Ptyktos/hashtrinity?rev=92a88636ab0e59ffe366ace07c019cd1f35a0bfa#92a88636ab0e59ffe366ace07c019cd1f35a0bfa"
 
 [[package]]
 name = "itoa"

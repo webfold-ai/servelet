@@ -1,0 +1,256 @@
+{
+  "nodes": {
+    "advisory-db": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792563638,
+        "narHash": "sha256-yA69+sE0Y1VA2K4NPqSzCr88nQs3BYDHkrv+YMA8KgM=",
+        "ref": "refs/heads/main",
+        "rev": "4b587f00996ebe5c05a73eaef105ef241e876414",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/rustsec/advisory-db"
+      },
+      "original": {
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/rustsec/advisory-db"
+      }
+    },
+    "apeiron": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792631491,
+        "narHash": "sha256-ABYuC2cGsd/4lrogqKsRc2u2RUyJps5toPVj4HfoKRk=",
+        "ref": "refs/heads/apeiron",
+        "rev": "255ca3018a0f06300153d905cb19b37ea548bb56",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Ptyktos/apeiron"
+      },
+      "original": {
+        "rev": "255ca3018a0f06300153d905cb19b37ea548bb56",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Ptyktos/apeiron"
+      }
+    },
+    "apeiron_2": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790522142,
+        "narHash": "sha256-G+JFSyUH51XTRxG7+U20AVOz/X+FAgEJDx975RgiRck=",
+        "ref": "master",
+        "rev": "a2b50938679888cba22e5174e8dce92dfb6414cc",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Ptyktos/apeiron.git"
+      },
+      "original": {
+        "rev": "a2b50938679888cba22e5174e8dce92dfb6414cc",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Ptyktos/apeiron.git"
+      }
+    },
+    "crane": {
+      "locked": {
+        "lastModified": 1787326676,
+        "narHash": "sha256-lWhBbBvC05/xwivKBBiM2YNizpmgqCgyOIzomvRuwxs=",
+        "ref": "refs/tags/v0.24.0",
+        "rev": "692f7e9ef2ece8125b466f66f2af532b3edaed0d",
+        "revCount": 891,
+        "type": "git",
+        "url": "https://github.com/ipetkov/crane"
+      },
+      "original": {
+        "ref": "refs/tags/v0.24.0",
+        "type": "git",
+        "url": "https://github.com/ipetkov/crane"
+      }
+    },
+    "hashtrinity": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792734336,
+        "narHash": "sha256-9BzTgVHQ5qEO4c3qYOkZD2RnmbWgfnp4aDApjBEUg28=",
+        "ref": "refs/heads/main",
+        "rev": "92a88636ab0e59ffe366ace07c019cd1f35a0bfa",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Ptyktos/hashtrinity"
+      },
+      "original": {
+        "rev": "92a88636ab0e59ffe366ace07c019cd1f35a0bfa",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Ptyktos/hashtrinity"
+      }
+    },
+    "hashtrinity_2": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792630065,
+        "narHash": "sha256-/eZoN+knpUp3UlBDSH821xuQweZJCGGft/yLcf9sWh4=",
+        "ref": "refs/heads/main",
+        "rev": "8de00eff38d3ffa5393190c2358a9e54dac5bc2f",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Ptyktos/hashtrinity"
+      },
+      "original": {
+        "rev": "8de00eff38d3ffa5393190c2358a9e54dac5bc2f",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Ptyktos/hashtrinity"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1792503283,
+        "narHash": "sha256-OtQ9jaQ9aXZDm61TqykPLZdXJa2NMykYG3d0tbT683U=",
+        "rev": "cd4ea8d57de16f4810bc5f14207bac45fbf19f67",
+        "type": "tarball",
+        "url": "https://releases.nixos.org/nixos/26.05/nixos-26.05.12297.cd4ea8d57de1/nixexprs.tar.xz"
+      },
+      "original": {
+        "type": "tarball",
+        "url": "https://channels.nixos.org/nixos-26.05/nixexprs.tar.xz"
+      }
+    },
+    "relayfold": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792630265,
+        "narHash": "sha256-P+G0eI7JCVu4m6ZfR6m2y5Eue6p5hMx+OXIGgCb8yOM=",
+        "ref": "refs/heads/main",
+        "rev": "2a79c5aa9f9988d6376ec2f135ccd143ae8473b1",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Ptyktos/relayfold"
+      },
+      "original": {
+        "rev": "2a79c5aa9f9988d6376ec2f135ccd143ae8473b1",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Ptyktos/relayfold"
+      }
+    },
+    "root": {
+      "inputs": {
+        "apeiron": "apeiron",
+        "hashtrinity": "hashtrinity",
+        "tas-nix": "tas-nix"
+      }
+    },
+    "rust-overlay": {
+      "inputs": {
+        "nixpkgs": [
+          "tas-nix",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1792567368,
+        "narHash": "sha256-mrM+zFDRO1pI85t2SEq5R739BIq7Nv5XkFtVZK9nkZM=",
+        "ref": "refs/heads/master",
+        "rev": "83dd732f2428827f35d997deae108a2ced5125f4",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/oxalica/rust-overlay"
+      },
+      "original": {
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/oxalica/rust-overlay"
+      }
+    },
+    "saga": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1791986476,
+        "narHash": "sha256-5avCn42qy6V/ZxzppSd29O3/rDaQzZgMqeYa3vYZouQ=",
+        "ref": "refs/heads/main",
+        "rev": "42890a089030e47e0bee4ea497fec6740ce15173",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Tasmanian-Cloud/saga"
+      },
+      "original": {
+        "rev": "42890a089030e47e0bee4ea497fec6740ce15173",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Tasmanian-Cloud/saga"
+      }
+    },
+    "servelet": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792630251,
+        "narHash": "sha256-jE92eSZ05FE5N+9wWdoGGmgLOrfGyUEWVF0d8rGY02k=",
+        "ref": "refs/heads/main",
+        "rev": "cba6f1649736f653d12cfe7d9281578c3cf4e4b0",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Ptyktos/servelet"
+      },
+      "original": {
+        "rev": "cba6f1649736f653d12cfe7d9281578c3cf4e4b0",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Ptyktos/servelet"
+      }
+    },
+    "tas-nix": {
+      "inputs": {
+        "advisory-db": "advisory-db",
+        "apeiron": "apeiron_2",
+        "crane": "crane",
+        "hashtrinity": "hashtrinity_2",
+        "nixpkgs": "nixpkgs",
+        "relayfold": "relayfold",
+        "rust-overlay": "rust-overlay",
+        "saga": "saga",
+        "servelet": "servelet",
+        "transport": "transport"
+      },
+      "locked": {
+        "dir": "nix",
+        "lastModified": 1792714437,
+        "narHash": "sha256-nCe+C83bAuOD3KAes0hLXsgQBYhpu8u+y87k8cLzIqs=",
+        "ref": "refs/heads/claude/vigilant-heisenberg-kjspke",
+        "rev": "b42be0f2381f77a09e6cc86bb42f6d398b2e7b7a",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Tasmanian-Cloud/hosting-runtime"
+      },
+      "original": {
+        "dir": "nix",
+        "rev": "b42be0f2381f77a09e6cc86bb42f6d398b2e7b7a",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Tasmanian-Cloud/hosting-runtime"
+      }
+    },
+    "transport": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792672063,
+        "narHash": "sha256-2d7ZnNe6FqBzyOLTl4d+fKEVwuA1RhpUQoOTTfJ8LXk=",
+        "ref": "refs/heads/main",
+        "rev": "e88d3f468cfc798109cf2b2728d9a00940e5a6d0",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Ptyktos/transport"
+      },
+      "original": {
+        "rev": "e88d3f468cfc798109cf2b2728d9a00940e5a6d0",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/Ptyktos/transport"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}

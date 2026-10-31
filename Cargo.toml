@@ -25,7 +25,7 @@ publish = false
 # one graph make `hashtrinity::Table` two incompatible types. This was the self-hosted GitLab
 # mirror on `branch = "main"`: unreachable from builders and a moving target. A branch is never a
 # pin; the rev is.
-hashtrinity = { git = "https://github.com/Ptyktos/hashtrinity", rev = "8de00eff38d3ffa5393190c2358a9e54dac5bc2f", features = ["codec", "validate", "error", "derive"] }
+hashtrinity = { git = "https://github.com/Ptyktos/hashtrinity", rev = "92a88636ab0e59ffe366ace07c019cd1f35a0bfa", features = ["codec", "validate", "error", "derive"] }
 
 # Shared, minimal tokio. `default-features = false` everywhere so no crate inherits a feature
 # (the `full` blowup, or `rt-multi-thread`) it does not name itself.
