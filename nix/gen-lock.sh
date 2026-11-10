@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Regenerate nix/Cargo.lock for the tree the flake actually builds (the workspace with hashtrinity
-# vendored and patched in, see flake.nix). Needs network (cargo resolves crates.io and the git
+# Regenerate nix/Cargo.lock for the tree the flake actually builds (the workspace
+# crates and manifest, see flake.nix). Needs network (cargo resolves crates.io and the git
 # dependencies). Lock-update job only.
 #   nix/gen-lock.sh            sync nix/Cargo.lock with the manifest, keeping locked versions
 #   nix/gen-lock.sh --update   re-resolve everything to the newest versions
