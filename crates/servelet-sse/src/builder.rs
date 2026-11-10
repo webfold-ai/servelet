@@ -1,7 +1,7 @@
 // DEVIATION, the module's `use` line only: biota's `pub mod actix` imported these for the whole
 // module (lib.rs 29-33). Only the four names this file actually uses are imported here, from the
 // two crates that now own them; nothing is re-declared or renamed.
-use hashtrinity::codec::syntax::{AsTerm, SyntaxTerm};
+use wirefold::codec::syntax::{AsTerm, SyntaxTerm};
 use servelet_cookie::Cookie;
 use servelet_core::{Response, StatusCode};
 
@@ -91,7 +91,7 @@ pub fn streaming(&mut self, rx: tokio::sync::mpsc::Receiver<std::result::Result<
 
 pub fn json<T: AsTerm>(&mut self, value: T) -> Response {
     let term = value.to_term();
-    let body = hashtrinity::codec::syntax::render_surface(&term, hashtrinity::codec::syntax::Surface::Json);
+    let body = wirefold::codec::syntax::render_surface(&term, wirefold::codec::syntax::Surface::Json);
     self.content_type("application/json");
     self.build(self.status, body.into_bytes())
 }
@@ -101,7 +101,7 @@ pub fn json<T: AsTerm>(&mut self, value: T) -> Response {
 /// `Clone`) shouldn't need to clone just to satisfy `json`'s by-value signature.
 pub fn json_ref<T: AsTerm>(&mut self, value: &T) -> Response {
     let term = value.to_term();
-    let body = hashtrinity::codec::syntax::render_surface(&term, hashtrinity::codec::syntax::Surface::Json);
+    let body = wirefold::codec::syntax::render_surface(&term, wirefold::codec::syntax::Surface::Json);
     self.content_type("application/json");
     self.build(self.status, body.into_bytes())
 }

@@ -11,7 +11,7 @@ servelet-core = { path = "../servelet-core" }
 # `sync` only: `Router::layered` holds the wrapped service behind `tokio::sync::Mutex`. Not the
 # runtime, not the reactor -- no net/io-util/time here.
 tokio = { workspace = true, features = ["sync"] }
-hashtrinity.workspace = true
+wirefold.workspace = true
 # `Router::handle` opens a real `tracing` span per request. Not optional: the behaviour is
 # part of the moved code.
 tracing.workspace = true

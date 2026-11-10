@@ -19,18 +19,14 @@ license = "Apache-2.0"
 publish = false
 
 [workspace.dependencies]
-# One hashtrinity for every crate, and the SAME one every other Ptyktos crate in the platform
-# uses: this GitHub URL at this rev (transport, relayfold, kleis, hosting-runtime pin exactly
-# this form). Cargo treats a different URL, rev or branch as a different package, so two forms in
-# one graph make `hashtrinity::Table` two incompatible types. This was the self-hosted GitLab
-# mirror on `branch = "main"`: unreachable from builders and a moving target. A branch is never a
-# pin; the rev is.
-hashtrinity = { git = "https://github.com/Ptyktos/hashtrinity", rev = "b6aa208afa682ba0951f1b74941d140fbfa9fc50", features = ["codec", "validate", "error", "derive"] }
+# One wirefold (and, through it, one apeiron) for every crate: `wirefold::Table` is apeiron's table, so a second
+# URL, rev or branch anywhere in a consumer's graph would make it two incompatible types. A branch is never a pin; the rev is.
+wirefold = { git = "https://github.com/webfold-ai/wirefold", rev = "ba9a71284844cd1a7f14ae3b7105ad972aaa9e07", default-features = false, features = ["codec", "syntax", "error", "validate", "derive"] }
 
 # Shared, minimal tokio. `default-features = false` everywhere so no crate inherits a feature
 # (the `full` blowup, or `rt-multi-thread`) it does not name itself.
 tokio = { version = "1", default-features = false }
-rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "aws_lc_rs", "std", "tls12"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 rustls-pki-types = "1"
 # Client TLS, behind servelet-client's off-by-default `tls` feature (rule 6).

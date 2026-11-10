@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use hashtrinity::{Coord, CoordMap, PHI};
+use wirefold::{Coord, CoordMap, PHI};
 use tokio::net::TcpStream;
 
 use crate::stream::Stream;

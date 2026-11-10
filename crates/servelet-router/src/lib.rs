@@ -21,7 +21,7 @@ use std::sync::Arc;
 use servelet_core::{Extensions, Method, Request, Response, StatusCode};
 
 // `CoordMap` for the literal-route fast path, `PHI` for the route coordinate.
-use hashtrinity::{Coord, CoordMap, PHI};
+use wirefold::{Coord, CoordMap, PHI};
 
 mod router;
 

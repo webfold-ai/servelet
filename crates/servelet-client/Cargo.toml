@@ -24,7 +24,7 @@ rustls-pki-types = { workspace = true, optional = true }
 # net/io-util: the sockets, the reads and the writes. time: the retry backoff and the read
 # timeouts. sync: the pool's Mutex. rt + macros: the moved `#[tokio::test]`s and `tokio::spawn`.
 tokio = { workspace = true, features = ["net", "io-util", "time", "sync", "rt", "rt-multi-thread", "macros"] }
-hashtrinity.workspace = true
+wirefold.workspace = true
 
 [features]
 default = []

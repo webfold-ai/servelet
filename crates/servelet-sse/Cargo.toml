@@ -17,7 +17,7 @@ servelet-h1 = { path = "../servelet-h1" }
 # `#[tokio::test]`. time: the keep-alive `timeout` in the writer.
 tokio = { workspace = true, features = ["sync", "macros", "rt"] }
 # json/json_ref: `hashtrinity::codec::syntax::render_surface`. Measured 4 hits, census section 7.
-hashtrinity.workspace = true
+wirefold.workspace = true
 
 [dev-dependencies]
 # The socket test drives the real path a consumer uses: a Router, h1's serve_connection, a real

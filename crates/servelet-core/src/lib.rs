@@ -21,7 +21,7 @@ use std::sync::Arc;
 // Re-used by `types.rs` (HeaderMap's store and coordinate hash) and `extensions.rs`
 // (the exact-key table). See docs/SPINE.md "Dependencies" for why these three names and no
 // others.
-use hashtrinity::{CoordMap, PHI};
+use wirefold::{CoordMap, PHI};
 
 mod error;
 mod extensions;
