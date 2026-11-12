@@ -78,9 +78,8 @@ pub fn tls_server_config(cert_chain_pem: &str, private_key_pem: &str) -> Result<
         .ok_or_else(|| Error::Tls("no PRIVATE KEY block found in the given PEM".to_string()))?;
     let key = rustls_pki_types::PrivateKeyDer::Pkcs8(rustls_pki_types::PrivatePkcs8KeyDer::from(key_der));
     // The server side is entirely self-controlled (we terminate our own inbound HTTPS), so it can
-    // mandate TLS 1.3 and drop `ring` — `hashtrinity-rustls::provider()` only has TLS 1.3 cipher
-    // suites, unlike `tls_config()` (the client side, reaching arbitrary third-party HTTPS).
-    let config = rustls::ServerConfig::builder_with_provider(std::sync::Arc::new(hashtrinity::rustls::provider()))
+    // mandate TLS 1.3 and use aws-lc-rs (FIPS-capable) instead of `ring`, unlike `tls_config()` (the client side, reaching arbitrary third-party HTTPS).
+    let config = rustls::ServerConfig::builder_with_provider(std::sync::Arc::new(rustls::crypto::aws_lc_rs::default_provider()))
         .with_protocol_versions(&[&rustls::version::TLS13])
         .map_err(|e| Error::Tls(e.to_string()))?
         .with_no_client_auth()

@@ -172,14 +172,14 @@ fn days_from_civil(y: u64, m: u64, d: u64) -> i64 {
 
 /// A cookie jar — store-and-replay of `Set-Cookie`/`Cookie`, keyed by domain, respecting RFC
 /// 6265's `Path`/`Expires`/`Max-Age`/`Secure`/`HttpOnly` attributes (not just name=value).
-// The outer (per-domain) map uses `hashtrinity::Table` -- the framework's own map face, the
+// The outer (per-domain) map uses `wirefold::Table` -- the framework's own map face, the
 // same primitive `crate::runtime::cache::Cache`/`crate::runtime::metrics::Registry`/`crate::runtime::cluster::Cluster` key on elsewhere in this
 // crate. The inner (per-domain cookie-name) map stays a plain `HashMap`: small (a handful of
 // cookies per domain) and read-modify-write on every `Set-Cookie`, where std's
 // `entry().or_default()` fits better than `Table`'s insert/overwrite-only API.
 #[derive(Debug, Default)]
 pub struct CookieJar {
-    by_domain: hashtrinity::Table<String, std::collections::HashMap<String, StoredCookie>>,
+    by_domain: wirefold::Table<String, std::collections::HashMap<String, StoredCookie>>,
 }
 
 impl CookieJar {

@@ -48,7 +48,7 @@ fn type_id_coord(id: std::any::TypeId) -> u64 {
 /// `Table` has no `get_mut` to build it on; every other operation (`get`/`insert`/`remove`, the
 /// shapes `FromRequestParts`-style extractors and middleware actually use) is exact.
 ///
-/// Uses `hashtrinity::Table` (the exact-key-storing variant), NOT `CoordMap` — `CoordMap`
+/// Uses `wirefold::Table` (the exact-key-storing variant), NOT `CoordMap` — `CoordMap`
 /// ("the address regenerates the key... stores nothing") is for keys that ARE their own
 /// collision-free coordinate (small dense integers, direct addressing); a `TypeId` hashed
 /// through `DefaultHasher` is an OPAQUE 64-bit value with no such guarantee, so two unrelated
@@ -58,7 +58,7 @@ fn type_id_coord(id: std::any::TypeId) -> u64 {
 /// by real comparison, which is what a type-map's correctness actually depends on.
 #[derive(Clone)]
 pub struct Extensions {
-    map: hashtrinity::Table<u64, Box<dyn CloneAny>>,
+    map: wirefold::Table<u64, Box<dyn CloneAny>>,
 }
 
 impl Default for Extensions {
@@ -75,7 +75,7 @@ impl std::fmt::Debug for Extensions {
 
 impl Extensions {
     pub fn new() -> Self {
-        Extensions { map: hashtrinity::Table::new() }
+        Extensions { map: wirefold::Table::new() }
     }
 
     /// Insert a value, returning whatever was previously stored for this exact type `T`.

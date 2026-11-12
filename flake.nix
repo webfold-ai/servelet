@@ -14,15 +14,16 @@
     # the merge commit (docs/NIX.md, "Re-pinning"). Keep `shallow=1`.
     tas-nix.url = "git+https://github.com/Tasmanian-Cloud/hosting-runtime?dir=nix&rev=b42be0f2381f77a09e6cc86bb42f6d398b2e7b7a&shallow=1";
 
-    # hashtrinity is vendored as a path dependency (see below); apeiron is its git dependency and is
-    # not fetchable from a builder: it is put in the store from a trusted checkout at this rev
-    # (docs/NIX.md, "Private inputs").
-    hashtrinity = { url = "git+https://github.com/Ptyktos/hashtrinity?rev=92a88636ab0e59ffe366ace07c019cd1f35a0bfa&shallow=1"; flake = false; };
-    apeiron = { url = "git+https://github.com/Ptyktos/apeiron?rev=255ca3018a0f06300153d905cb19b37ea548bb56&shallow=1"; flake = false; };
+    # wirefold and apeiron are git dependencies of the workspace and are not fetchable from a builder:
+    # they are put in the store from a trusted checkout at these revs (docs/NIX.md, "Private inputs").
+    # They must be the revs Cargo.toml and the consumers (webfold, transport, relayfold) pin, so a
+    # consumer's graph holds one apeiron.
+    wirefold = { url = "git+https://github.com/webfold-ai/wirefold?rev=ba9a71284844cd1a7f14ae3b7105ad972aaa9e07&shallow=1"; flake = false; };
+    apeiron = { url = "git+https://github.com/webfold-ai/apeiron?rev=d0eda3226193542949306f767d7280404921546f&shallow=1"; flake = false; };
   };
 
   outputs =
-    { self, tas-nix, hashtrinity, apeiron, ... }:
+    { self, tas-nix, wirefold, apeiron, ... }:
     let
       system = "x86_64-linux";
       pkgs = tas-nix.inputs.nixpkgs.legacyPackages.${system};
@@ -40,25 +41,9 @@
         "servelet-ws"
       ];
 
-      # hashtrinity (git, rev 92a8863) is built from the vendored input as a path dependency via
-      # [patch]: its `hashtrinity_derive` reads `../../src/proc_masq.rs`, outside its own package,
-      # which Crane's per-package git vendoring cannot provide. `exclude` keeps cargo from adopting
-      # the vendored tree as workspace members. Everything else in Cargo.toml is verbatim.
-      rawManifest = builtins.readFile ./Cargo.toml;
-      anchor = "resolver = \"2\"\n";
-      manifest =
-        assert lib.hasInfix anchor rawManifest || throw "servelet flake: Cargo.toml no longer contains ${anchor}";
-        pkgs.writeText "Cargo.toml" (
-          builtins.replaceStrings [ anchor ] [ "${anchor}exclude = [\"vendor\"]\n" ] rawManifest
-          + ''
-
-            # tas-nix flake: the pinned hashtrinity input, vendored (see flake.nix).
-            [patch."https://github.com/Ptyktos/hashtrinity"]
-            hashtrinity = { path = "vendor/hashtrinity" }
-            hashtrinity_derive = { path = "vendor/hashtrinity/hashtrinity_derive" }
-            hashtrinity_codegen = { path = "vendor/hashtrinity/hashtrinity_codegen" }
-          ''
-        );
+      # The manifest is the workspace's own Cargo.toml: wirefold and apeiron are ordinary git
+      # dependencies, supplied to the build from the store inputs above (see `gitInputs`).
+      manifest = ./Cargo.toml;
 
       sources = lib.fileset.toSource {
         root = ./.;
@@ -66,9 +51,8 @@
       };
       # Everything but the lock; nix/gen-lock.sh locks exactly this.
       tree = pkgs.runCommand "servelet-tree" { } ''
-        mkdir -p $out/vendor
+        mkdir -p $out
         cp -r ${sources}/crates $out/crates
-        cp -r ${hashtrinity} $out/vendor/hashtrinity
         chmod -R u+w $out
         cp ${manifest} $out/Cargo.toml
       '';
@@ -89,7 +73,7 @@
         toolchainFile = ./nix/no-toolchain-file;
         rustChannel = "1.99.0";
         cleanSource = false;
-        # `cargo fmt --all` would also format the vendored hashtrinity: format only our members.
+        # Format only our members.
         fmtArgs = lib.concatMapStringsSep " " (m: "-p ${m}") members;
         bins = { };
         # servelet-client/tests/tls_feature.rs asserts that an https:// URL is refused with `Error::Tls`
@@ -99,7 +83,8 @@
         # A finding in the product code (check the scheme first), skipped here, not fixed here.
         testSkip = [ "without_the_feature_an_https_url_is_refused_by_name_not_silently_downgraded" ];
         gitInputs = {
-          "https://github.com/Ptyktos/apeiron" = apeiron;
+          "https://github.com/webfold-ai/apeiron" = apeiron;
+          "https://github.com/webfold-ai/wirefold" = wirefold;
         };
       };
       # `nix run .#run-tests`: run the test binaries the Nix `test` gate built, OUTSIDE the sandbox, on

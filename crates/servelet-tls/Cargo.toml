@@ -16,7 +16,6 @@ rustls.workspace = true
 rustls-pki-types.workspace = true
 # The handshake itself.
 tokio-rustls.workspace = true
-hashtrinity.workspace = true
 tokio = { workspace = true, features = ["net", "rt", "rt-multi-thread", "macros", "io-util"] }
 
 [dev-dependencies]

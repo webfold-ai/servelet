@@ -17,14 +17,12 @@ nix run .#repro-check -- .#servelet-sbom       # build twice, compare byte for b
 
 ## What is built
 
-All nine crates. The source is assembled by the flake (`nix build .#servelet-tree`): `crates/`, the committed
-`Cargo.toml` plus `exclude = ["vendor"]` and a `[patch."https://github.com/Ptyktos/hashtrinity"]` section, and
-the pinned `hashtrinity` input vendored under `vendor/`. hashtrinity is a path dependency in the build on
-purpose: its `hashtrinity_derive` reads `../../src/proc_masq.rs`, outside its own package, which Crane's
-per-package git vendoring cannot provide. The rev is the one `Cargo.toml` names (`92a8863`, which moved from `8de00ef` only to take apeiron `255ca30`).
+All nine crates. The source is assembled by the flake (`nix build .#servelet-tree`): `crates/` and the committed
+`Cargo.toml`, verbatim. `wirefold` and `apeiron` are ordinary git dependencies; the flake supplies them to the
+build from the pinned inputs below (`gitInputs`), so the builder never fetches them. (hashtrinity, which this
+used to vendor as a path dependency, is no longer a dependency of any crate.)
 
-`nix/Cargo.lock` is the committed `Cargo.lock` with that one source changed (hashtrinity: git -> path), every
-other locked version unchanged. `nix/gen-lock.sh` syncs it, `--check` verifies it, `--update` re-resolves.
+`nix/Cargo.lock` is the `Cargo.lock` of that tree. `nix/gen-lock.sh` syncs it, `--check` verifies it, `--update` re-resolves.
 
 One test is skipped (`testSkip`, reason at the call site in `flake.nix`):
 `servelet-client` `tls_feature::without_the_feature_an_https_url_is_refused_by_name_not_silently_downgraded`
@@ -43,8 +41,8 @@ substituters (see `hosting-runtime/nix/README.md`). `sandbox-fallback` defaults 
   `b42be0f2381f77a09e6cc86bb42f6d398b2e7b7a` is the head of hosting-runtime's branch
   `claude/vigilant-heisenberg-kjspke`, which is not merged.** After a squash merge it can become unreachable:
   re-pin to the merge commit (change `rev=`, `nix flake lock`, `nix flake check`). Keep `shallow=1`.
-* `hashtrinity` and `apeiron` are `flake = false` inputs pinned by rev. `hashtrinity` must stay at the rev in
-  `Cargo.toml`; `apeiron` at the rev `hashtrinity` pins (`nix/Cargo.lock`). A rev that differs from the lock is
+* `wirefold` and `apeiron` are `flake = false` inputs pinned by rev. `wirefold` must stay at the rev in
+  `Cargo.toml`; `apeiron` at the rev `wirefold` pins (`nix/Cargo.lock`). A rev that differs from the lock is
   an evaluation error.
 * Private inputs (`tas-nix` while the repository is private, `apeiron`): a builder holds no credential. A job
   with a read-only credential clones each repository at the pinned rev and locks with the checkout standing

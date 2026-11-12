@@ -53,7 +53,7 @@ mod moved {
         assert_eq!(info.realip_remote_addr(), None);
     }
 
-    /// The `#[derive(hashtrinity::Error)]` replacement must produce IDENTICAL behavior to the
+    /// The `#[derive(wirefold::Error)]` replacement must produce IDENTICAL behavior to the
     /// hand-written impls it replaced: the same Display text, real `?`-operator conversion from
     /// `io::Error` via `#[from]`, and a genuine `source()` chain for the Io variant.
     #[test]
