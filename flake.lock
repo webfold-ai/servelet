@@ -235,16 +235,16 @@
     "wirefold": {
       "flake": false,
       "locked": {
-        "lastModified": 1794541123,
-        "narHash": "sha256-fUjibaGYOadK5wSEJ1FAQR4G0gfskZdpWG8J2BfOCIc=",
+        "lastModified": 1794546295,
+        "narHash": "sha256-XPHJLlKGkFCh1jKiEZBu0fI8Z3HqVnYpf1BundwyKxU=",
         "ref": "refs/heads/main",
-        "rev": "ed1ffdf4d34a86ab60e128ea14d2475e57650946",
+        "rev": "98df8bfb8051fb24ca43ce3ddc446641684ef8f9",
         "shallow": true,
         "type": "git",
         "url": "https://github.com/webfold-ai/wirefold"
       },
       "original": {
-        "rev": "ed1ffdf4d34a86ab60e128ea14d2475e57650946",
+        "rev": "98df8bfb8051fb24ca43ce3ddc446641684ef8f9",
         "shallow": true,
         "type": "git",
         "url": "https://github.com/webfold-ai/wirefold"
