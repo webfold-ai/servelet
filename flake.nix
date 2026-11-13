@@ -18,8 +18,8 @@
     # they are put in the store from a trusted checkout at these revs (docs/NIX.md, "Private inputs").
     # They must be the revs Cargo.toml and the consumers (webfold, transport, relayfold) pin, so a
     # consumer's graph holds one apeiron.
-    wirefold = { url = "git+https://github.com/webfold-ai/wirefold?rev=ba9a71284844cd1a7f14ae3b7105ad972aaa9e07&shallow=1"; flake = false; };
-    apeiron = { url = "git+https://github.com/webfold-ai/apeiron?rev=d0eda3226193542949306f767d7280404921546f&shallow=1"; flake = false; };
+    wirefold = { url = "git+https://github.com/webfold-ai/wirefold?rev=ed1ffdf4d34a86ab60e128ea14d2475e57650946&shallow=1"; flake = false; };
+    apeiron = { url = "git+https://github.com/webfold-ai/apeiron?rev=1c3d4a1da565cde409f6f3cb343086aa6853eb9c&shallow=1"; flake = false; };
   };
 
   outputs =
