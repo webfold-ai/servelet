@@ -21,7 +21,7 @@ publish = false
 [workspace.dependencies]
 # One wirefold (and, through it, one apeiron) for every crate: `wirefold::Table` is apeiron's table, so a second
 # URL, rev or branch anywhere in a consumer's graph would make it two incompatible types. A branch is never a pin; the rev is.
-wirefold = { git = "https://github.com/webfold-ai/wirefold", rev = "98df8bfb8051fb24ca43ce3ddc446641684ef8f9", default-features = false, features = ["codec", "syntax", "error", "validate", "derive"] }
+wirefold = { git = "https://github.com/webfold-ai/wirefold", rev = "28d875794d4541eb952d23984be411348dc3f1c0", default-features = false, features = ["codec", "syntax", "error", "validate", "derive"] }
 
 # Shared, minimal tokio. `default-features = false` everywhere so no crate inherits a feature
 # (the `full` blowup, or `rt-multi-thread`) it does not name itself.
