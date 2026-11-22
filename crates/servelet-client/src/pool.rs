@@ -2,10 +2,8 @@
 
 // DEVIATION, the `use` lines only: biota's `kernel.rs` had them at the top of the file (lines
 // 1-16). Nothing is re-declared or renamed.
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, OnceLock};
 
-use wirefold::{Coord, CoordMap, PHI};
+use wirefold::{Coord, CoordMap};
 use tokio::net::TcpStream;
 
 use crate::stream::Stream;
@@ -85,7 +83,6 @@ pub(crate) fn pool_put(identity: &str, conn: PooledConn) {
 pub(crate) async fn connect(uri: &Uri, resolve: &std::collections::HashMap<String, std::net::SocketAddr>) -> Result<(Stream, bool)> {
     let identity = identity_for(uri)?;
     if let Some(pooled) = pool_take(&identity) {
-        eprintln!("DEBUG  target=bedrock::client");  // was: DEBUG target: "bedrock::client", %identity, "reusing pooled connection"
         // A pooled connection is only ever stored with an empty `leftover` (see `send_request`'s
         // pool-return step, which only pools a connection when there wasn't any) — there's no
         // plumbing here to hand leftover bytes into a fresh `send_request` call, so this
@@ -104,6 +101,17 @@ pub(crate) async fn connect_fresh(
     uri: &Uri,
     resolve: &std::collections::HashMap<String, std::net::SocketAddr>,
 ) -> Result<Stream> {
+    // Refuse before any network I/O: without the `tls` feature an https URL must not resolve or dial
+    // the host at all (the DNS query alone would disclose it), it must fail by name immediately.
+    #[cfg(not(feature = "tls"))]
+    if uri.scheme_str() == Some("https") {
+        return Err(Error::Tls(
+            "an https:// URL needs this crate's `tls` feature (rustls, tokio-rustls and the \
+             system trust store); it is off by default so a plaintext consumer links no TLS \
+             stack -- turn it on with `features = [\"tls\"]`"
+                .to_string(),
+        ));
+    }
     let (host, port) = host_port(uri)?;
     let dial_target = resolve.get(&host).copied();
     let tcp = match dial_target {
@@ -124,12 +132,6 @@ pub(crate) async fn connect_fresh(
                 .map_err(|e| Error::Tls(format!("handshake with {host} failed: {e}")))?;
             Ok(Stream::Tls(Box::new(tls)))
         }
-        #[cfg(not(feature = "tls"))]
-        Some("https") => Err(Error::Tls(
-            "an https:// URL needs this crate's `tls` feature (rustls, tokio-rustls and the \
-             system trust store); it is off by default so a plaintext consumer links no TLS \
-             stack -- turn it on with `features = [\"tls\"]`".to_string(),
-        )),
         _ => Ok(Stream::Plain(tcp)),
     }
 }

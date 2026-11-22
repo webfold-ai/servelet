@@ -8,8 +8,7 @@ innocent connections and no other test would notice.
 Counts in this document come from one run of
 
 ```
-CARGO_TARGET_DIR=/home/ctown/.cache/cargo-target-servelet-harden \
-  cargo-slot test -j3 --workspace --no-fail-fast
+cargo test -j3 --workspace --no-fail-fast
 ```
 
 on this worktree at the commit that adds this file: **172 passed, 0 failed, 0 hung**

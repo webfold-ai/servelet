@@ -26,7 +26,7 @@
 # Exit 0 only if every mutation was caught AND the restored suite is green.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/home/ctown/.cache/cargo-target-servelet-spine}"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target}"
 export CARGO_INCREMENTAL=0
 
 caught=0; total=24

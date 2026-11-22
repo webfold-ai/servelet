@@ -2,15 +2,12 @@
 
 // DEVIATION, the `use` lines only: biota's `kernel.rs` had them at the top of the file (lines
 // 1-16). Nothing is re-declared or renamed.
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime};
+use std::sync::Arc;
 
-use servelet_core::{header, parse_uri, Error, HeaderMap, HeaderName, HeaderValue, Method, Response, Result, StatusCode, Uri};
+use servelet_core::{header, parse_uri, Error, HeaderMap, HeaderName, HeaderValue, Method, Response, Result, Uri};
 
-use crate::pool::{connect, connect_fresh, pool_put, pool_take};
+use crate::pool::{connect, connect_fresh};
 use crate::send::{send_request, send_request_streaming, StreamingResponse};
-use crate::stream::Stream;
 
 /// Small non-cryptographic PRNG step for the multipart boundary -- the same five lines, from
 /// the same place: `transport`'s `http_client.rs` (Ptyktos/transport, rev pinned in biota's
@@ -327,7 +324,7 @@ impl Form {
             .unwrap_or(0);
         let a = splitmix64(now);
         let b = splitmix64(a ^ 0x5DEECE66D);
-        Form { parts: Vec::new(), boundary: format!("bedrock-{a:016x}{b:016x}") }
+        Form { parts: Vec::new(), boundary: format!("servelet-{a:016x}{b:016x}") }
     }
 
     pub fn part(mut self, name: impl Into<String>, part: Part) -> Self {
@@ -435,7 +432,6 @@ impl RequestBuilder {
                         return Ok(resp);
                     }
                     Err(e) => {
-                        eprintln!("WARN  target=bedrock::client  error={}  attempt={}", e, attempt);
                         last_err = Some(e);
                         if attempt + 1 < attempts {
                             tokio::time::sleep(backoff).await;
@@ -483,7 +479,6 @@ async fn send_with_redirects(
             // A pooled connection's first write/read failing is expected, not exceptional —
             // see `connect`'s own doc for the three real ways this happens. Retry exactly once
             // on a guaranteed-fresh connection before giving up.
-            eprintln!("DEBUG  target=bedrock::client");  // was: DEBUG target: "bedrock::client", "pooled connection failed on first use, retrying fresh"
             let fresh = connect_fresh(&uri, &client.inner.resolve_overrides).await?;
             result = send_request(fresh, method.clone(), &uri, headers.clone(), body.clone()).await;
         }
