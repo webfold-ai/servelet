@@ -13,12 +13,12 @@ yet. When the last consumer of an old copy has moved, the old copy is deleted in
 | relayfold | 34 | plus `relayfold-control` (29), `relayfold-helm/proxy-runtime`, `relayfold-bench` (3): one repo |
 | ptyktos-webgui | 13 | |
 | webfold-fleet | 3 | path dependency on a local biota checkout |
-| sangdb-bench | 2 | path dependency on a local biota checkout |
+| the store's bench crate | 2 | path dependency on a local biota checkout |
 | wachd-rust | 0 | dead dependency: delete the line, no reroute needed |
 | nexus (opsfold/nexus) | its `authed`, `http::*` modules | first consumer; defines the spine's contract |
 | biota (members) | 0 | no member uses it; the crate is deleted from biota (branch `yokoszn/remove-http-server`, be13032) |
 
-## Wave 2: users of bedrock's HTTP code (about 10 of 30 dependents)
+## Wave 2: users of the ops stack's HTTP code (about 10 of 30 dependents)
 
 | repo | http-ish imports | notes |
 |---|---|---|
@@ -31,12 +31,12 @@ yet. When the last consumer of an old copy has moved, the old copy is deleted in
 | investfold | 12 | |
 | hosting-runtime | 8 | |
 
-The other ~20 bedrock dependents use non-HTTP parts (ontology, sangdb helpers, spend). They are out of
-scope here and keep their dependency until bedrock itself is dismantled.
+The other ~20 dependents use non-HTTP parts (ontology, store helpers, spend). They are out of
+scope here and keep their dependency until the ops stack itself is dismantled.
 
 ## Rule for each reroute
 
 A worker moves ONE repo on its own branch in its own worktree, never pushes, and proves: (1) the repo's
 tests give the same pass/fail counts before and after (counts pasted), (2) `cargo tree` shows the
-`biota-http-server`/`bedrock` HTTP dependency gone and what replaced it, (3) the dependency weight did not
+`biota-http-server` and the ops stack HTTP dependency gone and what replaced it, (3) the dependency weight did not
 grow. Pin servelet by `rev`, never a floating branch.

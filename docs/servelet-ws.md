@@ -111,7 +111,7 @@ whole runtime tree is `servelet-core` + `servelet-client` + `tokio`.
 
 The worktree already contained a `wip: … (unverified)` snapshot commit when I started — a previous
 run of this unit had died. I re-measured rather than restarted: all of it held. One thing in it
-looked like a defect and is not: the `eprintln!("DEBUG target=bedrock::serve")` in `wire.rs` drops
+looked like a defect and is not: the `eprintln!` in `wire.rs` that drops
 its error binding, but `git show 4ce2dcd:http-server/src/kernel.rs` has that exact line with the
 same comment — upstream's own `tracing::debug!` was stripped when these fixtures were prepared, so
 keeping it is what "byte-for-byte" requires.

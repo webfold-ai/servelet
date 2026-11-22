@@ -252,7 +252,7 @@ async fn read_request_buffered<R: AsyncReadExt + AsyncWriteExt + Unpin>(
 
 pub async fn serve<A: ToSocketAddrs>(addr: A, router: Router) -> Result<()> {
     let listener = TcpListener::bind(addr).await?;
-    eprintln!("INFO  bedrock::serve  listening");
+    eprintln!("INFO  servelet::serve  listening");
     loop {
         let (stream, peer) = listener.accept().await?;
         stream.set_nodelay(true)?;
@@ -316,7 +316,7 @@ pub async fn serve_connection_with_limits<S: AsyncRead + AsyncWrite + Unpin + Se
                 None => req,
             },
             Err(e) => {
-                eprintln!("DEBUG  target=bedrock::serve");  // was: DEBUG target: "bedrock::serve", error = %e, "connection closed while reading request"
+                eprintln!("DEBUG  target=servelet::serve");  // was: DEBUG target: "servelet::serve", error = %e, "connection closed while reading request"
                 // HARDENING: the moved code broke here and closed the socket with nothing said,
                 // so a client could not tell a malformed request from a dropped connection. A
                 // `400` with a zero-length body costs one small write and is the only thing
@@ -338,7 +338,7 @@ pub async fn serve_connection_with_limits<S: AsyncRead + AsyncWrite + Unpin + Se
         if let Some(upgrade) = crate::upgrade::take_upgrade(&mut resp) {
             let upgraded = crate::upgrade::Upgraded::new(Box::new(reader));
             if let Err(e) = upgrade(upgraded).await {
-                eprintln!("DEBUG  target=bedrock::serve");  // was: DEBUG target: "bedrock::serve", error = %e, "the upgraded connection ended in an error"
+                eprintln!("DEBUG  target=servelet::serve");  // was: DEBUG target: "servelet::serve", error = %e, "the upgraded connection ended in an error"
             }
             return;
         }
@@ -354,18 +354,18 @@ pub async fn serve_connection_with_limits<S: AsyncRead + AsyncWrite + Unpin + Se
             let mut writer: &mut (dyn tokio::io::AsyncWrite + Unpin + Send) = &mut reader;
             let written = (formatter)(&mut writer, resp).await;
             if let Err(e) = written {
-                eprintln!("DEBUG  target=bedrock::serve");  // was: DEBUG target: "bedrock::serve", error = %e, "connection closed during streaming response"
+                eprintln!("DEBUG  target=servelet::serve");  // was: DEBUG target: "servelet::serve", error = %e, "connection closed during streaming response"
             }
             break;
         }
         if let Some(streaming_body) = crate::streaming_body(&resp) {
             if let Err(e) = write_streaming_response(&mut reader, resp, streaming_body).await {
-                eprintln!("DEBUG  target=bedrock::serve");  // was: DEBUG target: "bedrock::serve", error = %e, "connection closed during streaming response"
+                eprintln!("DEBUG  target=servelet::serve");  // was: DEBUG target: "servelet::serve", error = %e, "connection closed during streaming response"
             }
             break;
         }
         if let Err(e) = write_response(&mut reader, resp).await {
-            eprintln!("DEBUG  target=bedrock::serve");  // was: DEBUG target: "bedrock::serve", error = %e, "connection closed while writing response"
+            eprintln!("DEBUG  target=servelet::serve");  // was: DEBUG target: "servelet::serve", error = %e, "connection closed while writing response"
             break;
         }
         if !keep {
@@ -503,7 +503,7 @@ async fn write_streaming_response<W: AsyncWriteExt + Unpin>(
         match next {
             Ok(bytes) => write_chunk(writer, &bytes).await?,
             Err(e) => {
-                eprintln!("DEBUG  target=bedrock::serve");  // was: DEBUG target: "bedrock::serve", error = %e, "streaming source reported an error mid-stream, ending the response"
+                eprintln!("DEBUG  target=servelet::serve");  // was: DEBUG target: "servelet::serve", error = %e, "streaming source reported an error mid-stream, ending the response"
                 break;
             }
         }

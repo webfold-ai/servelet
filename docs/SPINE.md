@@ -3,7 +3,7 @@
 Extraction of the Ptyktos HTTP server out of `biota/http-server` into four crates that each do one
 thing and compose. Source read at **biota rev `4ce2dcd`** (pushed `origin/main`) with
 `git -C ~/projects/biota show 4ce2dcd:<path>` only — that checkout is shared and dirty and was
-never read from the working tree and never written to. `bedrock`'s `native_lib.rs` was **not**
+never read from the working tree and never written to. `the ops stack's `native_lib.rs` was **not**
 copied from (deprecated, FSL-1.1).
 
 Everything in `crates/` was moved, not refactored (README rule 9). `scripts/verify_move.py` proves
