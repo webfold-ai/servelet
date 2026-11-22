@@ -19,7 +19,7 @@ nix run .#repro-check -- .#servelet-sbom       # build twice, compare byte for b
 
 All nine crates. The source is assembled by the flake (`nix build .#servelet-tree`): `crates/` and the committed
 `Cargo.toml`, verbatim. `wirefold` and `apeiron` are ordinary git dependencies; the flake supplies them to the
-build from the pinned inputs below (`gitInputs`), so the builder never fetches them. (hashtrinity, which this
+build from the pinned inputs below (`gitInputs`), so the builder never fetches them. (apeiron, which this
 used to vendor as a path dependency, is no longer a dependency of any crate.)
 
 `nix/Cargo.lock` is the `Cargo.lock` of that tree. `nix/gen-lock.sh` syncs it, `--check` verifies it, `--update` re-resolves.

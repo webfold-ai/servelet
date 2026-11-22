@@ -2,7 +2,7 @@
 
 The Ptyktos HTTP server, as small crates that each do one thing and compose.
 
-It replaces two copies of the same code: `bedrock`'s `native_lib.rs`/`httpsrv.rs` and `biota/http-server`
+It replaces two copies of the same code: the ops stack's `native_lib.rs`/`httpsrv.rs` and `biota/http-server`
 (`lib.rs` 7,380 lines + `kernel.rs` 5,059 + `kernel/runtime.rs` 4,822 + `kernel/platform.rs` 2,322, measured
 2026-10-03). A consumer takes the pieces it uses and nothing else. When a consumer runs on servelet, the
 old copy is deleted in the same change: one home per capability, never a wrapper.
@@ -25,7 +25,7 @@ old copy is deleted in the same change: one home per capability, never a wrapper
    in the crate's README and a gate fails it if it grows.
 7. **Auth is not optional.** The router has no way to register a handler without an authenticated context
    (see `servelet-authed`). The only escape is a registered, reasoned, counted public route.
-8. **No third-party HTTP stack.** hashtrinity does JSON and codecs, transport does TLS/ACME/network. This
+8. **No third-party HTTP stack.** apeiron does JSON and codecs, transport does TLS/ACME/network. This
    repo adds no new third-party crates without a written reason in the crate's README.
 9. **Extraction is byte-for-byte.** Moved code is moved, not refactored in the same commit. Behaviour
    changes are separate commits with their own tests.
@@ -52,9 +52,9 @@ old copy is deleted in the same change: one home per capability, never a wrapper
 | `servelet-openapi` | OpenAPI document generation from routes | `lib.rs` `openapi` |
 
 What is extracted and what is left out is decided per module in `docs/EXTRACTION.md`, from a census of
-BOTH copies (biota's `http-server` and bedrock's `native_lib.rs`), with file:line callers. Correction
+BOTH copies (biota's `http-server` and the ops stack's `native_lib.rs`), with file:line callers. Correction
 2026-10-04: this README first said `x402`, `webhook`, `s3_gateway`, `h2`, `websocket` and `openapi` had no
-callers. That was wrong: it had searched only `biota_http_server::`. The bedrock copy's consumers call them
+callers. That was wrong: it had searched only `biota_http_server::`. The other copy's consumers call them
 (webhook 135 sites, websocket 93, x402 72, h2 29, openapi 22, s3_gateway 16), mostly from repos being retired
 (opsfold, syndesi). Whether those callers are live, and so whether each module is extracted or dropped, is a
 per-row decision in EXTRACTION.md, not an assumption.

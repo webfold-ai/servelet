@@ -97,7 +97,7 @@ pub fn tls_server_config(cert_chain_pem: &str, private_key_pem: &str) -> Result<
 pub async fn serve_tls<A: ToSocketAddrs>(addr: A, router: Router, tls_config: std::sync::Arc<rustls::ServerConfig>) -> Result<()> {
     let listener = TcpListener::bind(addr).await?;
     let acceptor = tokio_rustls::TlsAcceptor::from(tls_config);
-    eprintln!("INFO  bedrock::serve  listening (tls)");
+    eprintln!("INFO  servelet::serve  listening (tls)");
     loop {
         let (stream, peer) = listener.accept().await?;
         stream.set_nodelay(true)?;
@@ -107,7 +107,7 @@ pub async fn serve_tls<A: ToSocketAddrs>(addr: A, router: Router, tls_config: st
             async move {
                 match acceptor.accept(stream).await {
                     Ok(tls_stream) => serve_connection(tls_stream, router, Some(peer)).await,
-                    Err(e) => eprintln!("DEBUG  target=bedrock::serve  error={}", e),
+                    Err(e) => eprintln!("DEBUG  target=servelet::serve  error={}", e),
                 }
             }
             ,
