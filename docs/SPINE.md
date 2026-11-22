@@ -91,7 +91,7 @@ and a stale entry there is reported, so it cannot rot.
 the crate's public API, so the traits were **brought**, not cut: `kernel/platform.rs` 353–440 and
 484–573 moved verbatim into `servelet-core/src/service.rs`, because rule 2 says pieces meet at
 `Request`/`Response`/`Handler`/`Layer` — and `Layer` is where they meet. The compiler then paid for
-the choice: `service.rs` uses `CoordMap`/`PHI`/`Table`, so **`servelet-core` needs hashtrinity**,
+the choice: `service.rs` uses `CoordMap`/`PHI`/`Table`, so **`servelet-core` needs the codec crate**,
 which it would not otherwise have needed for a pure data model. That is the honest cost of bringing
 it, recorded here rather than hidden. `impl Service<Request> for Router` came with it
 (`platform.rs` 1126–1138) because without it `layered` has nothing to wrap.
@@ -117,14 +117,14 @@ with_state, layer, layered, handle, contains_route}`, `PathParams::{get, ordered
 
 `servelet-core` has **no tokio at all** — no runtime, no reactor, no `async fn` anywhere in the
 crate. It builds and runs inside a plain `fn main` or a `#[test]`. Its only dependency is
-**hashtrinity**, for exactly three uses the moved code already had:
+**apeiron**, for exactly three uses the moved code already had:
 `CoordMap` + `PHI` for `HeaderMap`'s store and coordinate hash (`types.rs`), `Table` for
 `Extensions`' exact-key type-map (`extensions.rs`), and `#[derive(hashtrinity::Error)]` for the
 `Error` enum's `Display`/`source` (`error.rs`). Replacing any of those with a hand-rolled map
 would be a rewrite, which rule 9 forbids in the same commit as the move.
 
 The other three crates take the **minimum** they need — `servelet-h1` does not pull
-`hashtrinity`, and neither `servelet-h1` nor `servelet-tls` pulls `serde`/`serde_json`/`bytes`/
+`apeiron`, and neither `servelet-h1` nor `servelet-tls` pulls `serde`/`serde_json`/`bytes`/
 `base64`. `hashtrinity` is the GitHub URL pinned at rev `92a8863`, the same form every other Ptyktos crate
 in the platform uses (it was the GitLab mirror on `branch = "main"`, unreachable from builders).
 
