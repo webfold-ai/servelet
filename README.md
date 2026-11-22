@@ -1,6 +1,6 @@
 # servelet
 
-The Ptyktos HTTP server, as small crates that each do one thing and compose.
+A small-crates HTTP server: crates that each do one thing and compose.
 
 It replaces two copies of the same code: the ops stack's `native_lib.rs`/`httpsrv.rs` and `biota/http-server`
 (`lib.rs` 7,380 lines + `kernel.rs` 5,059 + `kernel/runtime.rs` 4,822 + `kernel/platform.rs` 2,322, measured

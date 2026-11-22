@@ -28,4 +28,3 @@ pub use send::*;
 pub use stream::*;
 
 
-pub(crate) use pool::{connect, pool_put, pool_take};

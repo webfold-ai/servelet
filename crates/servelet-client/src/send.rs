@@ -44,7 +44,7 @@ async fn write_request(
             .await?;
     }
     stream
-        .write_all(b"User-Agent: bedrock/0.1.0\r\n")
+        .write_all(concat!("User-Agent: servelet-client/", env!("CARGO_PKG_VERSION"), "\r\n").as_bytes())
         .await?;
 
     for (name, value) in headers.iter() {

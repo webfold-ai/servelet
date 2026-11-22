@@ -12,7 +12,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 # Shared machine, tight memory/disk: the coordinator's build discipline applies to gates too.
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/home/ctown/.cache/cargo-target-servelet-spine}"
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target}"
 export CARGO_INCREMENTAL=0
 
 rc=0
