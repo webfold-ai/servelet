@@ -295,6 +295,15 @@ pub async fn serve_connection_with_limits<S: AsyncRead + AsyncWrite + Unpin + Se
     // `crate::httpsrv::httpx::h2::PREFACE`, another crate's constant. Everything after the sniff
     // is HTTP/1.1 line framing, byte-for-byte unchanged.
     loop {
+        // Between requests the connection is IDLE, not slow: wait for the first byte of the next request under the
+        // same deadline, and when none comes (the deadline, or the peer closed) end the connection WITHOUT a
+        // response. The `400` below is for a request that started and went wrong. Written to an idle connection it
+        // sits unread in the peer's socket until a pooling client reuses the connection and takes it for the answer
+        // to its next request (iotaDB: "posting ingest refused: 400").
+        match tokio::time::timeout(limits.read_timeout, tokio::io::AsyncBufReadExt::fill_buf(&mut reader)).await {
+            Ok(Ok(buffered)) if !buffered.is_empty() => {}
+            _ => break,
+        }
         // HARDENING: the whole of one request gets a deadline. The moved code had none, so a
         // peer that opened a connection and sent one byte every ten seconds held the stream, its
         // `BufReader` and its task open for as long as it liked -- which is a connection-exhaustion

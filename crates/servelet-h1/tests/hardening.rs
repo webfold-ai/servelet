@@ -571,3 +571,34 @@ async fn a_request_line_under_the_request_line_ceiling_is_not_refused_as_too_lon
     assert!(!line.contains("400"), "a request line under the ceiling must not be a 400: {line:?}");
     assert!(!line.is_empty(), "the server must answer a request line under the ceiling");
 }
+
+// ── An idle keep-alive connection is closed, not answered ─────────────────────────────────
+
+/// The bug this pins: after a served request the connection waits for the next one under the read deadline, and when
+/// the deadline passed with NOTHING received the server wrote `400 ... the request did not arrive within ...`. A
+/// pooled client that reuses that connection just after the server gave up reads the stale 400 as the answer to its
+/// NEW request (iotaDB "posting search refused: 400" / "posting ingest refused: 400"). Idle is not malformed: the
+/// connection must end with no bytes.
+#[tokio::test]
+async fn an_idle_keepalive_connection_is_closed_without_a_400() {
+    let addr = spawn_with(RequestLimits { read_timeout: Duration::from_millis(300), ..RequestLimits::default() }).await;
+    let mut stream = TcpStream::connect(addr).await.unwrap();
+    stream.write_all(&good_request("")).await.unwrap();
+    // The first response, read exactly (keep-alive: the server does not close after it).
+    let mut head = [0u8; 4096];
+    let n = tokio::time::timeout(Duration::from_secs(5), stream.read(&mut head)).await.unwrap().unwrap();
+    assert!(String::from_utf8_lossy(&head[..n]).starts_with("HTTP/1.1 200"), "the control request must be served");
+    // Now say nothing for longer than the read deadline and read what the server sends before it closes.
+    let rest = read_all(&mut stream).await;
+    assert!(rest.is_empty(), "an idle connection must close silently, the server wrote: {:?}", String::from_utf8_lossy(&rest));
+}
+
+/// The control: a request that STARTED and then stalled is slow, not idle, and is still refused with a 400.
+#[tokio::test]
+async fn a_started_but_stalled_request_still_gets_a_400() {
+    let addr = spawn_with(RequestLimits { read_timeout: Duration::from_millis(300), ..RequestLimits::default() }).await;
+    let mut stream = TcpStream::connect(addr).await.unwrap();
+    stream.write_all(b"GET /ok HTTP/1.1\r\nHost: x\r\n").await.unwrap(); // no blank line: never completes
+    let rest = read_all(&mut stream).await;
+    assert_refused(&rest);
+}
